@@ -1,0 +1,20 @@
+# tooling / agent state
+.claude/
+.impeccable/
+
+# dependencies & builds
+node_modules/
+dist/
+.vite/
+
+# cloudflare / wrangler local state and secrets
+.wrangler/
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+
+# logs & OS junk
+*.log
+.DS_Store
+coverage/
