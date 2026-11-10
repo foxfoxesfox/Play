@@ -33,7 +33,6 @@ export function useDrawer(lobby: boolean | null, mobile: boolean) {
   return {
     open,
     toggle: () => setOpen(o => { writePref(o ? 'closed' : 'open'); return !o }),
-    show: () => setOpen(true),
     close: () => { writePref('closed'); setOpen(false) },
   }
 }

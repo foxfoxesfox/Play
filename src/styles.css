@@ -227,7 +227,9 @@ button.card:hover { translate: 0 -4px; }
 .lobby-note__game:hover { background: var(--ink-faint); }
 .lobby-note__game:active { transform: scale(0.96); }
 .lobby-note__game span { display: inline-flex; align-items: center; gap: 4px; font-weight: 800; background: var(--ink); color: var(--paper); border-radius: 999px; padding: 2px 10px; }
-.lobby-note__game .icon { width: 14px; height: 14px; }
+.lobby-note__game .icon { width: 14px; height: 14px; transition: rotate 200ms cubic-bezier(0.22, 1, 0.36, 1); }
+/* the arrow points toward the drawer when it's closed, and back out when it's open */
+.lobby-note__game.is-open .icon { rotate: 180deg; }
 
 /* my hand */
 .my-hand { position: relative; z-index: 3; display: flex; flex-direction: column; align-items: center; margin-top: clamp(8px, 2vw, 22px); min-height: 40px; }

@@ -91,7 +91,7 @@ function Room({ state, send, drawer, mobile }: { state: TableState; send: Send; 
   return (
     <main className="room" ref={roomRef}>
       <section className="felt-area" aria-label="Poker table">
-        <Stage state={state} send={send} openDrawer={drawer.show} />
+        <Stage state={state} send={send} drawerOpen={drawer.open} toggleDrawer={drawer.toggle} />
         {seated && (
           <div className="play-row">
             <MyHand v={v} send={send} />
@@ -142,7 +142,7 @@ function seatLayout(v: View) {
 export const dealOrder = (v: View, k: number, cardIdx: number) =>
   cardIdx * 16 + ((k - v.button - 1 + 2 * v.seats.length) % v.seats.length)
 
-function Stage({ state, send, openDrawer }: { state: TableState; send: Send; openDrawer: () => void }) {
+function Stage({ state, send, drawerOpen, toggleDrawer }: { state: TableState; send: Send; drawerOpen: boolean; toggleDrawer: () => void }) {
   const v = state.view
   const layout = useMemo(() => seatLayout(v), [v])
   const stageRef = useRef<HTMLDivElement>(null)
@@ -239,7 +239,7 @@ function Stage({ state, send, openDrawer }: { state: TableState; send: Send; ope
         )
       })}
       {v.me < 0 && <JoinForm send={send} hosting={v.hostSeat < 0} />}
-      {v.phase === 'lobby' && v.me >= 0 && <LobbyNote state={state} send={send} openDrawer={openDrawer} />}
+      {v.phase === 'lobby' && v.me >= 0 && <LobbyNote state={state} send={send} drawerOpen={drawerOpen} toggleDrawer={toggleDrawer} />}
     </div>
   )
 }
@@ -391,7 +391,7 @@ function JoinForm({ send, hosting }: { send: Send; hosting: boolean }) {
   )
 }
 
-function LobbyNote({ state, send, openDrawer }: { state: TableState; send: Send; openDrawer: () => void }) {
+function LobbyNote({ state, send, drawerOpen, toggleDrawer }: { state: TableState; send: Send; drawerOpen: boolean; toggleDrawer: () => void }) {
   const v = state.view
   const s = v.settings
   const players = v.seats.filter(Boolean).length
@@ -400,9 +400,9 @@ function LobbyNote({ state, send, openDrawer }: { state: TableState; send: Send;
     <div className="lobby-note">
       <p className="lobby-note__title">{players < 2 ? 'Waiting for friends…' : v.isHost ? 'Ready when you are' : `Waiting for ${host} to deal`}</p>
       <p className="lobby-note__sub">{players < 2 ? 'Copy the invite link and send it to them.' : `${players} at the table`}</p>
-      <button className="lobby-note__game" onClick={openDrawer}>
+      <button className={`lobby-note__game${drawerOpen ? ' is-open' : ''}`} onClick={toggleDrawer} aria-expanded={drawerOpen} aria-controls="drawer">
         <b>{MODES[s.mode]}</b> · {s.smallBlind}/{s.bigBlind} · {s.turnSeconds}s turns
-        <span>{v.isHost ? 'Game settings' : 'Rules'}<Icon name="arrow" /></span>
+        <span>{drawerOpen ? 'Hide' : v.isHost ? 'Game settings' : 'Rules'}<Icon name="arrow" /></span>
       </button>
       {v.isHost && (
         <button className="sticker sticker--main" disabled={players < 2} onClick={() => send({ t: 'start' })}>
