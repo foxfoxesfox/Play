@@ -6,6 +6,7 @@ import { Card } from './Card'
 import { Icon } from './Icon'
 import { GameChoices, HandGuide, MODE_INFO, SETTING_HINT, TableRules, depth } from './Rules'
 import { Dealer, type DealerApi } from './Dealer'
+import { Drawer, useDrawer, useMobile } from './Drawer'
 import { DEAL_GAP, SHUFFLE_MS, burn, centre, chipTo, countTo, dealBoard, dealIn, floatUp, glideTo, panelIn, popIn, rowsIn, shake, slide, swapIn } from './motion'
 import { saveName, savedName, useTable, type TableState } from './net'
 
@@ -17,6 +18,8 @@ const usePrev = <T,>(v: T) => {
 
 export function TablePage({ code }: { code: string }) {
   const { state, error, online, send } = useTable(code)
+  const mobile = useMobile()
+  const drawer = useDrawer(state ? state.view.phase === 'lobby' : null, mobile)
   const errRef = useRef<HTMLDivElement>(null)
   const [showErr, setShowErr] = useState(false)
   useEffect(() => {
@@ -29,8 +32,8 @@ export function TablePage({ code }: { code: string }) {
 
   return (
     <div className="table-page">
-      <TopBar code={code} state={state} online={online} send={send} />
-      {state ? <Room state={state} send={send} /> : <p className="loading">Pulling up a chair…</p>}
+      <TopBar code={code} state={state} online={online} send={send} drawerOpen={drawer.open} onDrawer={drawer.toggle} />
+      {state ? <Room state={state} send={send} drawer={drawer} mobile={mobile} /> : <p className="loading">Pulling up a chair…</p>}
       <div className={`toast${showErr && error ? ' is-on' : ''}`} ref={errRef} role="status" aria-live="polite">
         {error?.message}
       </div>
@@ -40,7 +43,9 @@ export function TablePage({ code }: { code: string }) {
 
 type Send = (m: ClientMsg) => void
 
-function TopBar({ code, state, online, send }: { code: string; state: TableState | null; online: boolean; send: Send }) {
+function TopBar({ code, state, online, send, drawerOpen, onDrawer }: {
+  code: string; state: TableState | null; online: boolean; send: Send; drawerOpen: boolean; onDrawer: () => void
+}) {
   const [copied, setCopied] = useState(false)
   const v = state?.view
   const copy = async () => {
@@ -61,35 +66,48 @@ function TopBar({ code, state, online, send }: { code: string; state: TableState
           Leave seat
         </button>
       )}
+      <button className={`pill pill--btn${drawerOpen ? ' is-on' : ''}`} onClick={onDrawer} aria-expanded={drawerOpen} aria-controls="drawer">
+        <Icon name="menu" />Table
+      </button>
     </header>
   )
 }
 
-function Room({ state, send }: { state: TableState; send: Send }) {
+type DrawerCtl = ReturnType<typeof useDrawer>
+
+function Room({ state, send, drawer, mobile }: { state: TableState; send: Send; drawer: DrawerCtl; mobile: boolean }) {
   const v = state.view
   const seated = v.me >= 0
-  const sideRef = useRef<HTMLElement>(null)
+  const roomRef = useRef<HTMLElement>(null)
+  const panelsRef = useRef<HTMLDivElement>(null)
   const seen = useRef(new WeakSet<Element>())
-  // panels ease in the first time they appear (on load, or when you become host), never on routine updates
+  // panels ease in the first time they appear (when the drawer opens, or when you become host), never on routine updates
   useLayoutEffect(() => {
-    const fresh = [...(sideRef.current?.children ?? [])].filter(el => !seen.current.has(el) && !el.classList.contains('actions'))
+    if (!drawer.open) return
+    const fresh = [...(panelsRef.current?.children ?? [])].filter(el => !seen.current.has(el))
     fresh.forEach(el => seen.current.add(el))
     panelIn(fresh)
   })
   return (
-    <main className="room">
+    <main className="room" ref={roomRef}>
       <section className="felt-area" aria-label="Poker table">
-        <Stage state={state} send={send} />
-        {seated && <MyHand v={v} send={send} />}
+        <Stage state={state} send={send} openDrawer={drawer.show} />
+        {seated && (
+          <div className="play-row">
+            <MyHand v={v} send={send} />
+            <Actions state={state} send={send} />
+          </div>
+        )}
       </section>
-      <aside className="side" ref={sideRef}>
-        <HandLog v={v} />
-        {v.isHost && <HostPanel state={state} send={send} />}
-        {v.hostSeat < 0 && <GameChoices />}
-        {v.hostSeat >= 0 && !v.isHost && v.phase === 'lobby' && <TableRules s={v.settings} />}
-        <HandGuide />
-        {seated && <Actions state={state} send={send} />}
-      </aside>
+      <Drawer open={drawer.open} mobile={mobile} onClose={drawer.close} roomRef={roomRef}>
+        <div className="drawer__panels" ref={panelsRef} id="drawer">
+          {v.isHost && <HostPanel state={state} send={send} />}
+          {v.hostSeat < 0 && <GameChoices />}
+          {v.hostSeat >= 0 && !v.isHost && <TableRules s={v.settings} />}
+          <HandLog v={v} />
+          <HandGuide />
+        </div>
+      </Drawer>
     </main>
   )
 }
@@ -124,7 +142,7 @@ function seatLayout(v: View) {
 export const dealOrder = (v: View, k: number, cardIdx: number) =>
   cardIdx * 16 + ((k - v.button - 1 + 2 * v.seats.length) % v.seats.length)
 
-function Stage({ state, send }: { state: TableState; send: Send }) {
+function Stage({ state, send, openDrawer }: { state: TableState; send: Send; openDrawer: () => void }) {
   const v = state.view
   const layout = useMemo(() => seatLayout(v), [v])
   const stageRef = useRef<HTMLDivElement>(null)
@@ -221,7 +239,7 @@ function Stage({ state, send }: { state: TableState; send: Send }) {
         )
       })}
       {v.me < 0 && <JoinForm send={send} hosting={v.hostSeat < 0} />}
-      {v.phase === 'lobby' && v.me >= 0 && <LobbyNote state={state} />}
+      {v.phase === 'lobby' && v.me >= 0 && <LobbyNote state={state} send={send} openDrawer={openDrawer} />}
     </div>
   )
 }
@@ -373,14 +391,24 @@ function JoinForm({ send, hosting }: { send: Send; hosting: boolean }) {
   )
 }
 
-function LobbyNote({ state }: { state: TableState }) {
+function LobbyNote({ state, send, openDrawer }: { state: TableState; send: Send; openDrawer: () => void }) {
   const v = state.view
+  const s = v.settings
   const players = v.seats.filter(Boolean).length
   const host = v.seats[v.hostSeat]?.name ?? 'the host'
   return (
     <div className="lobby-note">
       <p className="lobby-note__title">{players < 2 ? 'Waiting for friends…' : v.isHost ? 'Ready when you are' : `Waiting for ${host} to deal`}</p>
       <p className="lobby-note__sub">{players < 2 ? 'Copy the invite link and send it to them.' : `${players} at the table`}</p>
+      <button className="lobby-note__game" onClick={openDrawer}>
+        <b>{MODES[s.mode]}</b> · {s.smallBlind}/{s.bigBlind} · {s.turnSeconds}s turns
+        <span>{v.isHost ? 'Game settings' : 'Rules'}<Icon name="arrow" /></span>
+      </button>
+      {v.isHost && (
+        <button className="sticker sticker--main" disabled={players < 2} onClick={() => send({ t: 'start' })}>
+          {v.handNo ? 'Resume dealing' : 'Deal first hand'}
+        </button>
+      )}
     </div>
   )
 }

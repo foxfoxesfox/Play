@@ -118,9 +118,47 @@ export function swapIn(els: Element[]) {
 }
 
 /** Rows settle in when a list opens (hand guide). */
-export function rowsIn(els: Element[]) {
+export function rowsIn(els: Element[], start = 0) {
   if (!els.length || reduced()) return
-  animate(els, { opacity: { from: 0, to: 1 }, x: { from: -8, to: 0 }, duration: 320, delay: stagger(28), ease: EASE_OUT })
+  animate(els, { opacity: { from: 0, to: 1 }, x: { from: -8, to: 0 }, duration: 320, delay: stagger(28, { start }), ease: EASE_OUT })
+}
+
+/** A card flies out of its trigger face-down and flips over to its face. */
+export function flipOpen(card: HTMLElement, from: Pt) {
+  const c = centre(card)
+  if (reduced()) return animate(card, { opacity: { from: 0, to: 1 }, duration: 150, ease: 'out(2)' })
+  animate(card, {
+    x: { from: from.x - c.x, to: 0 },
+    y: { from: from.y - c.y, to: 0 },
+    scale: { from: 0.2, to: 1 },
+    rotateY: { from: 180, to: 0 },
+    rotateZ: { from: -8, to: 0 },
+    opacity: [{ from: 0, to: 1, duration: 90 }],
+    duration: 640,
+    ease: EASE_OUT,
+  })
+}
+
+/** Exit along the same path, faster: flip back over and return to the trigger. */
+export function flipClose(card: HTMLElement, to: Pt, done: () => void) {
+  if (reduced()) return done()
+  const c = centre(card)
+  animate(card, {
+    x: { to: to.x - c.x },
+    y: { to: to.y - c.y },
+    scale: { to: 0.2 },
+    rotateY: { to: 180 },
+    rotateZ: { to: -8 },
+    opacity: [{ to: 0, delay: 260, duration: 80 }],
+    duration: 340,
+    ease: 'out(2)',
+    onComplete: () => {
+      // reset for the next open
+      card.style.transform = ''
+      card.style.opacity = ''
+      done()
+    },
+  })
 }
 
 /** Highlight glides to the selected option. */

@@ -1,6 +1,8 @@
 import { BLIND_LEVEL_HANDS, MODES, type Mode, type Settings } from '../shared/poker'
+import { useRef } from 'react'
 import { Card } from './Card'
-import { rowsIn } from './motion'
+import { Icon } from './Icon'
+import { centre, flipClose, flipOpen, rowsIn } from './motion'
 
 // Plain-language rules for people who don't play much poker.
 export const MODE_INFO: Record<Mode, { tagline: string; how: string; betting: string }> = {
@@ -82,20 +84,62 @@ const HANDS: [string, string, string[]][] = [
   ['High card', 'None of the above: highest card plays', ['As', 'Jd', '8h', '5c', '2s']],
 ]
 
-/** Collapsible cheat sheet: which hands beat which. */
+/** Which hands beat which: a small button that opens the guide as a playing card,
+ *  flying out of the button back-first and flipping over to its face. */
 export function HandGuide() {
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const dlgRef = useRef<HTMLDialogElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
+  const closing = useRef(false)
+
+  const open = () => {
+    const dlg = dlgRef.current
+    if (!dlg || dlg.open) return
+    dlg.showModal()
+    const card = cardRef.current!
+    flipOpen(card, centre(btnRef.current!))
+    rowsIn([...card.querySelectorAll('.guide__list li')], 260)
+  }
+  const close = () => {
+    const dlg = dlgRef.current
+    if (!dlg?.open || closing.current) return
+    closing.current = true
+    flipClose(cardRef.current!, centre(btnRef.current!), () => { dlg.close(); closing.current = false; btnRef.current?.focus() })
+  }
+
   return (
-    <details className="receipt guide js-panel" onToggle={e => { const d = e.currentTarget; if (d.open) rowsIn([...d.querySelectorAll('.guide__list li')]) }}>
-      <summary className="log__title">which hands win?</summary>
-      <ol className="guide__list">
-        {HANDS.map(([name, desc, cards]) => (
-          <li key={name}>
-            <div className="guide__cards" aria-hidden="true">{cards.map(c => <Card key={c} card={c} />)}</div>
-            <div><b>{name}</b><span>{desc}</span></div>
-          </li>
-        ))}
-      </ol>
-      <p className="guide__note">Higher on the list beats lower. Ties go to the higher cards; exact ties split the pot.</p>
-    </details>
+    <>
+      <button ref={btnRef} className="receipt guide-btn js-panel" onClick={open} aria-haspopup="dialog">
+        <span className="guide-btn__cards" aria-hidden="true"><Card card="Ah" /><Card card="Kh" /></span>
+        which hands win?
+        <Icon name="arrow" />
+      </button>
+      <dialog
+        ref={dlgRef}
+        className="guide-dlg"
+        aria-labelledby="guide-title"
+        onCancel={e => { e.preventDefault(); close() }}
+        onClick={e => { if (e.target === e.currentTarget) close() }}
+      >
+        <div className="guide-card" ref={cardRef}>
+          <div className="guide-card__face">
+            <div className="guide-card__head">
+              <h2 id="guide-title">Which hands win?</h2>
+              <button className="pill pill--btn" onClick={close} autoFocus>Close</button>
+            </div>
+            <ol className="guide__list">
+              {HANDS.map(([name, desc, cards]) => (
+                <li key={name}>
+                  <div className="guide__cards" aria-hidden="true">{cards.map(c => <Card key={c} card={c} />)}</div>
+                  <div><b>{name}</b><span>{desc}</span></div>
+                </li>
+              ))}
+            </ol>
+            <p className="guide__note">Higher on the list beats lower. Ties go to the higher cards; exact ties split the pot.</p>
+          </div>
+          <div className="guide-card__back" aria-hidden="true" />
+        </div>
+      </dialog>
+    </>
   )
 }

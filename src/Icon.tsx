@@ -6,6 +6,7 @@ const PATHS = {
   crown: 'M4 18l-1-10 5 4 4-7 4 7 5-4-1 10z',
   plus: 'M12 5v14 M5 12h14',
   arrow: 'M5 12h14 M13 6l6 6-6 6',
+  menu: 'M4 7h16 M4 12h16 M4 17h10',
 } as const
 
 export function Icon({ name, title }: { name: keyof typeof PATHS; title?: string }) {
