@@ -294,6 +294,17 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 .form-err { margin-top: 10px; color: var(--red); font-size: 14px; }
 .home__more { margin-top: 28px; text-align: center; color: var(--ink-soft); border: 2px dashed var(--ink-faint); border-radius: 18px; padding: 20px; }
 
+/* ---------- footer: back to the main site ---------- */
+.site-foot { display: flex; justify-content: center; padding: 8px var(--gutter) 28px; }
+.site-foot a {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: var(--ink-soft); font-size: 14px; text-decoration: none;
+  padding: 4px 10px; border-radius: 999px;
+  transition: color 150ms ease-out, background-color 150ms ease-out;
+}
+.site-foot a:hover { color: var(--ink); background: var(--ink-faint); }
+.site-foot a:active { transform: scale(0.96); }
+
 /* ---------- small screens ---------- */
 @media (max-width: 960px) {
   .room { grid-template-columns: 1fr; padding-top: 8px; }
@@ -305,7 +316,8 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
     box-shadow: 0 -12px 24px -18px rgb(20 20 20 / 0.4);
   }
   .actions--idle p { padding: 8px; border: 0; }
-  .room:has(.actions) { padding-bottom: 230px; }
+  .room:has(.actions) { padding-bottom: 24px; }
+  body:has(.actions) .site-foot { padding-bottom: 230px; }
   .raise { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
   .raise label { flex: none; }
   .raise input { flex: 1; min-width: 120px; }

@@ -19,6 +19,12 @@ function App() {
     <>
       <InkDefs />
       {table ? <TablePage key={table[1]} code={table[1]} /> : <Home go={go} />}
+      <footer className="site-foot">
+        <a href="https://foxesvx.dev">
+          <img src="/fox-head.svg" alt="" width="22" height="21" />
+          made by martin · foxesvx.dev
+        </a>
+      </footer>
     </>
   )
 }
