@@ -315,6 +315,23 @@ input[type='range']::-moz-range-thumb { width: 22px; height: 22px; border-radius
 .form-err { margin-top: 10px; color: var(--red); font-size: 14px; }
 .home__more { margin-top: 28px; text-align: center; color: var(--ink-soft); border: 2px dashed var(--ink-faint); border-radius: 18px; padding: 20px; }
 
+/* ---------- leaderboard ---------- */
+.leaderboard { margin-top: clamp(40px, 6vw, 64px); }
+.leaderboard h2 { font-size: clamp(28px, 3vw, 38px); font-weight: 800; }
+.leaderboard__lede { margin-top: 4px; color: var(--ink-soft); }
+.leaderboard__cols { margin-top: 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.board-col:last-child { rotate: 0.6deg; }
+.board-col:first-child { rotate: -0.6deg; }
+.board-list { list-style: none; margin: 0; padding: 0; }
+.board-list li { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--ink-faint); }
+.board-list li:last-child { border-bottom: 0; }
+.board-list li:first-child .board-list__rank { background: var(--hi); }
+.board-list__rank { display: grid; place-items: center; width: 22px; height: 22px; border: 2px solid var(--ink); border-radius: 50%; font-size: 12px; font-weight: 800; }
+.board-list__name { display: flex; flex-direction: column; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.board-list__name small { font-weight: 400; font-size: 12px; color: var(--ink-soft); }
+.board-list .num { font-size: 17px; }
+.leaderboard__empty { color: var(--ink-soft); font-size: 14px; padding: 6px 0; }
+
 /* ---------- footer: back to the main site ---------- */
 .site-foot { display: flex; justify-content: center; padding: 8px var(--gutter) 28px; }
 .site-foot a {

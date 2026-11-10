@@ -13,6 +13,7 @@ interface Meta {
   turnKey: string
   turnDeadline: number
   nextHandAt: number
+  reportedHand?: number
 }
 
 /** One poker table. Holds authoritative state and every player's socket (hibernation API). */
@@ -128,6 +129,12 @@ export class Table extends DurableObject<Env> {
     if (key !== m.turnKey) { m.turnKey = key; m.turnDeadline = key ? now + g.settings.turnSeconds * 1000 : 0 }
     if (g.phase === 'showdown' && !m.nextHandAt) m.nextHandAt = now + SHOWDOWN_MS
     if (g.phase !== 'showdown') m.nextHandAt = 0
+    // a finished hand goes on the leaderboard exactly once
+    if (g.phase === 'showdown' && g.results?.length && m.reportedHand !== g.handNo) {
+      m.reportedHand = g.handNo
+      try { await this.env.LEADERBOARD.get(this.env.LEADERBOARD.idFromName('global')).record(g.results) }
+      catch (e) { console.error('leaderboard record failed', e) } // never block the game on the leaderboard
+    }
     const next = [m.turnDeadline, m.nextHandAt].filter(Boolean)
     if (next.length) await this.ctx.storage.setAlarm(Math.min(...next))
     else await this.ctx.storage.deleteAlarm()

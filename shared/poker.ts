@@ -43,6 +43,8 @@ export interface Seat {
 export type Phase = 'lobby' | 'preflop' | 'flop' | 'turn' | 'river' | 'bet1' | 'draw' | 'bet2' | 'showdown'
 
 export interface Winner { seat: number; amount: number; hand: string }
+/** One player's chip result for a finished hand: what they won minus what they put in. */
+export interface HandResult { id: string; name: string; net: number; won: boolean; pot: number }
 
 export interface Game {
   settings: Settings
@@ -62,6 +64,7 @@ export interface Game {
   log: string[]
   winners: Winner[]
   showCards: boolean
+  results?: HandResult[] // set when a hand finishes, for the leaderboard
   deadMoney?: number // chips from players who left mid-hand
 }
 
@@ -110,6 +113,8 @@ const actionable = (s: Seat) => s.inHand && !s.folded && !s.allIn
 const live = (s: Seat) => s.inHand && !s.folded
 
 export function sit(g: Game, id: string, name: string, seat?: number): number | string {
+  const taken = g.seats.some(s => s && s.id !== id && s.name.toLowerCase() === name.toLowerCase())
+  if (taken) return `Someone called ${name} is already at this table. Pick another name.`
   const existing = g.seats.findIndex(s => s?.id === id)
   if (existing >= 0) { g.seats[existing]!.name = name; return existing }
   const idx = seat !== undefined && seat >= 0 && seat < MAX_SEATS && !g.seats[seat] ? seat : g.seats.findIndex(s => !s)
@@ -158,6 +163,7 @@ export function startHand(g: Game, shuffle: (c: Card[]) => Card[] = cryptoShuffl
   g.deck = shuffle(fullDeck())
   g.board = []
   g.winners = []
+  g.results = []
   g.showCards = false
   g.deadMoney = 0
   g.button = nextSeat(g, g.button, s => s.inHand)
@@ -344,6 +350,11 @@ function award(g: Game, contenders: number[], reveal: boolean) {
     g.winners.push({ seat: k, amount: amt, hand })
     log(g, `${s.name} wins ${amt}${hand ? ' with ' + hand.toLowerCase() : ''}`)
   }
+  g.results = g.seats.flatMap((s, k) => {
+    if (!s || !s.inHand) return []
+    const amt = won.get(k) ?? 0
+    return [{ id: s.id, name: s.name, net: amt - s.committed, won: amt > 0, pot: amt }]
+  })
   for (const s of g.seats) if (s) { s.bet = 0 }
   g.deadMoney = 0
 }

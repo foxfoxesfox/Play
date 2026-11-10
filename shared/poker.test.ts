@@ -84,6 +84,14 @@ describe('no-limit hold\'em', () => {
   })
 })
 
+describe('names', () => {
+  it('rejects a duplicate name at the same table, ignoring case', () => {
+    const g = table([1000])
+    expect(sit(g, 'other-player', 'p0')).toMatch(/already at this table/)
+    expect(sit(g, 'p0', 'P0')).toBe(0) // you can keep your own name
+  })
+})
+
 describe('limit hold\'em', () => {
   it('uses fixed sizes and caps at four bets', () => {
     const g = table([1000, 1000, 1000], 'lhe')
@@ -141,6 +149,8 @@ describe('fuzz', () => {
         }
         expect(g.phase).toBe('showdown')
         expect(chips(g)).toBe(start)
+        // leaderboard results: every chip won was lost by someone
+        expect(g.results!.reduce((t, r) => t + r.net, 0)).toBe(0)
       }
     }
   })

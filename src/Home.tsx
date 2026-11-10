@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { stagger, animate } from 'animejs'
+import { Leaderboard } from './Board'
 import { Card } from './Card'
 import { Icon } from './Icon'
 import { reduced } from './motion'
@@ -78,6 +79,8 @@ export function Home({ go }: { go: (path: string) => void }) {
             {err && <p className="form-err" role="alert">{err}</p>}
           </div>
         </section>
+
+        <Leaderboard />
 
         <p className="home__more">More games are on the way.</p>
       </main>
