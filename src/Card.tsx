@@ -42,8 +42,8 @@ function Suit({ s, x, y, size, flip }: { s: string; x: number; y: number; size: 
   )
 }
 
-export function Card({ card, back, selected, className = '', style, onClick }: {
-  card?: string | null; back?: boolean; selected?: boolean; className?: string; style?: CSSProperties; onClick?: () => void
+export function Card({ card, back, selected, className = '', style, onClick, order }: {
+  card?: string | null; back?: boolean; selected?: boolean; className?: string; style?: CSSProperties; onClick?: () => void; order?: number
 }) {
   const faceDown = back || !card
   const label = faceDown ? 'Face-down card' : `${RANK_NAME[card[0]] ?? card[0]} of ${SUIT_NAME[card[1]]}`
@@ -56,6 +56,7 @@ export function Card({ card, back, selected, className = '', style, onClick }: {
       aria-label={label}
       aria-pressed={onClick ? !!selected : undefined}
       role={onClick ? undefined : 'img'}
+      data-order={order}
     >
       <svg viewBox="0 0 100 140" aria-hidden="true">
         <rect x="3" y="3" width="94" height="134" rx="11" className="card__edge" filter="url(#wobble)" />

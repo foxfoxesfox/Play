@@ -1,11 +1,12 @@
-import { createTimer } from 'animejs'
+import { createTimer, utils } from 'animejs'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { MODES, type Mode, type Settings, type SeatView, type View } from '../shared/poker'
 import type { ClientMsg } from '../shared/protocol'
 import { Card } from './Card'
 import { Icon } from './Icon'
-import { HandGuide, MODE_INFO, SETTING_HINT, TableRules, depth } from './Rules'
-import { centre, countTo, dealIn, flipIn, floatUp, popIn, shake, slide } from './motion'
+import { GameChoices, HandGuide, MODE_INFO, SETTING_HINT, TableRules, depth } from './Rules'
+import { Dealer, type DealerApi } from './Dealer'
+import { DEAL_GAP, SHUFFLE_MS, burn, centre, chipTo, countTo, dealBoard, dealIn, floatUp, glideTo, panelIn, popIn, rowsIn, shake, slide, swapIn } from './motion'
 import { saveName, savedName, useTable, type TableState } from './net'
 
 const usePrev = <T,>(v: T) => {
@@ -49,7 +50,7 @@ function TopBar({ code, state, online, send }: { code: string; state: TableState
     <header className="topbar">
       <a className="logo" href="/" aria-label="play home">play<Icon name="pencil" /></a>
       <span className="pill">table {code}</span>
-      {v && <span className="pill pill--quiet">{MODES[v.settings.mode]} · {v.sb}/{v.bb}</span>}
+      {v && v.hostSeat >= 0 && <span className="pill pill--quiet">{MODES[v.settings.mode]} · {v.sb}/{v.bb}</span>}
       {!online && <span className="pill pill--warn">reconnecting…</span>}
       <span className="spacer" />
       <button className="pill pill--btn" onClick={copy}>
@@ -67,16 +68,25 @@ function TopBar({ code, state, online, send }: { code: string; state: TableState
 function Room({ state, send }: { state: TableState; send: Send }) {
   const v = state.view
   const seated = v.me >= 0
+  const sideRef = useRef<HTMLElement>(null)
+  const seen = useRef(new WeakSet<Element>())
+  // panels ease in the first time they appear (on load, or when you become host), never on routine updates
+  useLayoutEffect(() => {
+    const fresh = [...(sideRef.current?.children ?? [])].filter(el => !seen.current.has(el) && !el.classList.contains('actions'))
+    fresh.forEach(el => seen.current.add(el))
+    panelIn(fresh)
+  })
   return (
     <main className="room">
       <section className="felt-area" aria-label="Poker table">
         <Stage state={state} send={send} />
         {seated && <MyHand v={v} send={send} />}
       </section>
-      <aside className="side">
+      <aside className="side" ref={sideRef}>
         <HandLog v={v} />
         {v.isHost && <HostPanel state={state} send={send} />}
-        {!v.isHost && v.phase === 'lobby' && <TableRules s={v.settings} />}
+        {v.hostSeat < 0 && <GameChoices />}
+        {v.hostSeat >= 0 && !v.isHost && v.phase === 'lobby' && <TableRules s={v.settings} />}
         <HandGuide />
         {seated && <Actions state={state} send={send} />}
       </aside>
@@ -86,44 +96,98 @@ function Room({ state, send }: { state: TableState; send: Send }) {
 
 // ---------------- table stage ----------------
 
+type Pt = { x: number; y: number }
+
+/** Seats run clockwise from you (bottom), up the left side and down the right,
+ *  leaving the top of the table for the dealer. */
 function seatLayout(v: View) {
   const n = v.seats.length
   const me = Math.max(0, v.me)
   const order = Array.from({ length: n }, (_, k) => (me + k) % n)
   const shown = v.me >= 0 ? order.filter(k => v.seats[k]) : order
+  const n2 = shown.length
+  const left = Math.ceil((n2 - 1) / 2)
+  // even spacing round the table, skipping the dealer's gap at the top; capped so small games don't bunch up
+  const step = Math.min(292 / n2, 72)
+  const angleOf = (i: number) => (i === 0 ? 90 : i <= left ? 90 + i * step : 450 - (n2 - i) * step)
   return shown.map((k, i) => {
-    const a = Math.PI / 2 + (i * 2 * Math.PI) / shown.length
+    const a = (angleOf(i) * Math.PI) / 180
     return {
       k,
       seat: { x: 50 + 44 * Math.cos(a), y: 50 + 41 * Math.sin(a) },
-      bet: { x: 50 + 27 * Math.cos(a), y: 50 + 20 * Math.sin(a) },
+      bet: { x: 50 + 27 * Math.cos(a), y: 50 + 22 * Math.sin(a) },
     }
   })
 }
+
+/** Dealing order: one card at a time, starting left of the button. */
+export const dealOrder = (v: View, k: number, cardIdx: number) =>
+  cardIdx * 16 + ((k - v.button - 1 + 2 * v.seats.length) % v.seats.length)
 
 function Stage({ state, send }: { state: TableState; send: Send }) {
   const v = state.view
   const layout = useMemo(() => seatLayout(v), [v])
   const stageRef = useRef<HTMLDivElement>(null)
-  const dealerRef = useRef<HTMLDivElement>(null)
+  const dealer = useRef<DealerApi>(null)
   const prevHand = usePrev(v.handNo)
   const prevBoard = usePrev(v.board.length)
+  const prevPhase = usePrev(v.phase)
+  // where chips were sitting last render, so they can be swept into the pot once they vanish
+  const bets = layout.flatMap(({ k, bet }) => (v.seats[k]?.bet ? [{ amount: v.seats[k]!.bet, pos: bet }] : []))
+  const prevBets = usePrev(bets)
 
-  // deal: every hole card flies in from the dealer spot when a new hand starts
+  const toClient = (p: Pt) => {
+    const r = stageRef.current!.getBoundingClientRect()
+    return { x: r.left + (p.x / 100) * r.width, y: r.top + (p.y / 100) * r.height }
+  }
+  const deckPt = () => { const d = dealer.current?.deck(); return d ? centre(d) : null }
+
+  // a new hand: shuffle, then deal one card at a time round the table
   useLayoutEffect(() => {
-    if (v.handNo === prevHand || v.phase === 'lobby' || !stageRef.current || !dealerRef.current) return
-    const from = centre(dealerRef.current)
-    const els = [...document.querySelectorAll('.js-deal')]
-    els.sort((a, b) => Number((a as HTMLElement).dataset.order) - Number((b as HTMLElement).dataset.order))
-    dealIn(els, from)
+    if (v.handNo === prevHand || v.phase === 'lobby' || !stageRef.current) return
+    const from = deckPt()
+    if (!from) return
+    const els = [...document.querySelectorAll<HTMLElement>('.js-deal')]
+    els.sort((a, b) => Number(a.dataset.order) - Number(b.dataset.order))
+    utils.set(els, { opacity: 0 })
+    dealer.current?.shuffle()
+    dealIn(els, from, SHUFFLE_MS + 80, () => dealer.current?.flick())
   }, [v.handNo]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // board: newly turned cards flip over
+  // the flop, turn and river: burn one, then slide the new cards off the deck and turn them
   useLayoutEffect(() => {
     if (v.board.length <= prevBoard || !stageRef.current) return
-    const els = [...stageRef.current.querySelectorAll('.board .card')].slice(prevBoard)
-    flipIn(els, v.handNo === prevHand ? 0 : 200)
+    const from = deckPt()
+    if (!from) return
+    const els = [...stageRef.current.querySelectorAll('.board .card:not(.card--slot)')].slice(prevBoard)
+    const holeCards = document.querySelectorAll('.js-deal').length
+    const wait = (v.handNo === prevHand ? 0 : SHUFFLE_MS + holeCards * DEAL_GAP + 300) + (prevBets.length ? 520 : 0)
+    utils.set(els, { opacity: 0 })
+    burn(stageRef.current, dealer.current?.deck() ?? null, wait)
+    dealBoard(els, from, wait + 240)
   }, [v.board.length]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // end of a betting round: chips sweep into the pot; at showdown the pot goes to the winner(s)
+  useLayoutEffect(() => {
+    const stage = stageRef.current
+    if (!stage || v.phase === prevPhase) return
+    const pot = stage.querySelector('.pot')
+    const potPt = pot ? centre(pot) : toClient({ x: 50, y: 55 })
+    const swept = v.handNo === prevHand && prevBets.length > 0 && bets.length === 0
+    if (swept) prevBets.forEach((b, i) => chipTo(stage, toClient(b.pos), potPt, b.amount.toLocaleString(), i * 40))
+    if (v.phase === 'showdown') {
+      v.winners.forEach((w, i) => {
+        const av = stage.querySelector(`[data-seat="${w.seat}"] .seat__avatar`)
+        if (av) chipTo(stage, potPt, centre(av), w.amount.toLocaleString(), (swept ? 560 : 120) + i * 80)
+      })
+    }
+  }, [v.phase, v.handNo]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // the dealer watches whoever is acting
+  useLayoutEffect(() => {
+    const av = v.toAct >= 0 ? stageRef.current?.querySelector(`[data-seat="${v.toAct}"] .seat__avatar`) : null
+    dealer.current?.lookAt(av ? centre(av) : null)
+  }, [v.toAct, layout.length])
 
   const winners = new Map(v.winners.map(w => [w.seat, w]))
   const acting = v.toAct
@@ -133,7 +197,7 @@ function Stage({ state, send }: { state: TableState; send: Send }) {
         <ellipse cx="500" cy="310" rx="440" ry="255" className="table-line" filter="url(#wobble)" />
         <ellipse cx="500" cy="310" rx="330" ry="180" className="turn-path" />
       </svg>
-      <div className="dealer-spot" ref={dealerRef} />
+      <Dealer ref={dealer} />
 
       <div className="centre">
         <div className="board" aria-label="Board">
@@ -156,7 +220,7 @@ function Stage({ state, send }: { state: TableState; send: Send }) {
           <EmptySeat key={k} k={k} pos={seat} send={send} />
         )
       })}
-      {v.me < 0 && <JoinForm send={send} />}
+      {v.me < 0 && <JoinForm send={send} hosting={v.hostSeat < 0} />}
       {v.phase === 'lobby' && v.me >= 0 && <LobbyNote state={state} />}
     </div>
   )
@@ -202,11 +266,11 @@ function SeatSpot(p: {
   const state = s.folded ? 'folded' : acting ? 'now' : p.winner ? 'won' : ''
   return (
     <>
-      <div className={`seat seat--${state || 'idle'}${p.isMe ? ' seat--me' : ''}`} style={{ left: `${p.pos.x}%`, top: `${p.pos.y}%` }}>
+      <div data-seat={p.k} className={`seat seat--${state || 'idle'}${p.isMe ? ' seat--me' : ''}`} style={{ left: `${p.pos.x}%`, top: `${p.pos.y}%` }}>
         {showCards && (
           <div className="seat__cards">
             {(s.cards ?? Array(s.cardCount).fill(null)).map((c, i) => (
-              <Card key={i} card={c} back={!c} className="card--mini js-deal" style={{ zIndex: i }} />
+              <Card key={i} card={c} back={!c} className="card--mini js-deal" style={{ zIndex: i }} order={dealOrder(v, p.k, i)} />
             ))}
           </div>
         )}
@@ -294,7 +358,7 @@ function EmptySeat({ k, pos, send }: { k: number; pos: { x: number; y: number };
   )
 }
 
-function JoinForm({ send }: { send: Send }) {
+function JoinForm({ send, hosting }: { send: Send; hosting: boolean }) {
   const [name, setName] = useState(savedName)
   return (
     <form
@@ -303,7 +367,8 @@ function JoinForm({ send }: { send: Send }) {
     >
       <label htmlFor="nick" className="join__label">Your nickname</label>
       <input id="nick" value={name} maxLength={16} autoComplete="nickname" placeholder="e.g. Mei" onChange={e => setName(e.target.value)} autoFocus />
-      <button className="sticker sticker--main" disabled={!name.trim()}>Sit down</button>
+      <button className="sticker sticker--main" disabled={!name.trim()}>{hosting ? 'Sit down and host' : 'Sit down'}</button>
+      {hosting && <p className="hint">You'll host: pick the game (No-Limit, Limit or Five-Card Draw), stakes and timer next.</p>}
     </form>
   )
 }
@@ -328,15 +393,25 @@ function MyHand({ v, send }: { v: View; send: Send }) {
   useEffect(() => setPicked([]), [v.handNo, v.phase])
   const drawing = v.phase === 'draw' && v.toAct === v.me
   const cards = me.cards ?? []
+  const prevCards = usePrev(cards.join(' '))
+  const handRef = useRef<HTMLDivElement>(null)
+  // Five-Card Draw: replacement cards come off the deck (same hand, so not the opening deal)
+  useLayoutEffect(() => {
+    const was = prevCards.split(' ')
+    if (!handRef.current || !prevCards || was.length !== cards.length) return
+    const fresh = [...handRef.current.querySelectorAll<HTMLElement>('.card')].filter((_, i) => !was.includes(cards[i]))
+    const deck = document.querySelector('.deck')
+    if (fresh.length && fresh.length < cards.length && deck) dealIn(fresh, centre(deck), 0)
+  }, [cards.join(' ')]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!cards.length || !me.inHand) return <div className="my-hand my-hand--empty" />
   const n = cards.length
   return (
-    <div className={`my-hand${me.folded ? ' is-folded' : ''}`}>
+    <div className={`my-hand${me.folded ? ' is-folded' : ''}`} ref={handRef}>
       <div className="fan" style={{ ['--n' as string]: n }}>
         {cards.map((c, i) => (
           <span key={c} className="fan__slot" style={{ ['--i' as string]: i - (n - 1) / 2 }}>
             <Card
-              card={c} selected={picked.includes(i)} className="card--big js-deal"
+              card={c} selected={picked.includes(i)} className="card--big js-deal" order={dealOrder(v, v.me, i)}
               onClick={drawing ? () => setPicked(p => (p.includes(i) ? p.filter(x => x !== i) : [...p, i])) : undefined}
             />
           </span>
@@ -454,11 +529,25 @@ function Actions({ state, send }: { state: TableState; send: Send }) {
 function HostPanel({ state, send }: { state: TableState; send: Send }) {
   const v = state.view
   const [s, setS] = useState<Settings>(v.settings)
-  useEffect(() => setS(v.settings), [v.settings])
+  // only take the server's settings when they actually change, so updates don't wipe unsaved edits
+  const serverSettings = JSON.stringify(v.settings)
+  useEffect(() => setS(JSON.parse(serverSettings)), [serverSettings])
   const lobby = v.phase === 'lobby'
   const players = v.seats.filter(Boolean).length
   const dirty = JSON.stringify(s) !== JSON.stringify(v.settings)
   const num = (key: keyof Settings) => (e: React.ChangeEvent<HTMLInputElement>) => setS({ ...s, [key]: Math.round(Number(e.target.value)) })
+  const segRef = useRef<HTMLDivElement>(null)
+  const hiRef = useRef<HTMLSpanElement>(null)
+  const hintRef = useRef<HTMLDivElement>(null)
+  const firstGlide = useRef(true)
+  // the highlight glides to the chosen game, and its description swaps in
+  useLayoutEffect(() => {
+    const on = segRef.current?.querySelector<HTMLElement>('label.is-on')
+    if (!on) return
+    glideTo(hiRef.current, { top: on.offsetTop, height: on.offsetHeight }, firstGlide.current)
+    if (!firstGlide.current && hintRef.current) swapIn([...hintRef.current.children])
+    firstGlide.current = false
+  }, [s.mode, lobby])
 
   return (
     <section className="host receipt" aria-label="Host controls">
@@ -467,6 +556,8 @@ function HostPanel({ state, send }: { state: TableState; send: Send }) {
         <form className="host__form" onSubmit={e => { e.preventDefault(); send({ t: 'settings', settings: s }) }}>
           <fieldset className="seg">
             <legend className="host__legend">Game</legend>
+            <div className="seg__opts" ref={segRef}>
+            <span className="seg__hi" ref={hiRef} aria-hidden="true" />
             {(Object.keys(MODES) as Mode[]).map(m => (
               <label key={m} className={s.mode === m ? 'is-on' : ''}>
                 <input type="radio" name="mode" checked={s.mode === m} onChange={() => setS({ ...s, mode: m })} />
@@ -474,8 +565,9 @@ function HostPanel({ state, send }: { state: TableState; send: Send }) {
                 <span className="seg__tag">{MODE_INFO[m].tagline}</span>
               </label>
             ))}
+            </div>
           </fieldset>
-          <div className="hint">
+          <div className="hint" ref={hintRef}>
             <p>{MODE_INFO[s.mode].how}</p>
             <p>{MODE_INFO[s.mode].betting}</p>
           </div>

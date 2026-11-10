@@ -1,5 +1,6 @@
 import { BLIND_LEVEL_HANDS, MODES, type Mode, type Settings } from '../shared/poker'
 import { Card } from './Card'
+import { rowsIn } from './motion'
 
 // Plain-language rules for people who don't play much poker.
 export const MODE_INFO: Record<Mode, { tagline: string; how: string; betting: string }> = {
@@ -33,13 +34,29 @@ export function depth(s: Settings) {
   return { bbs, line: `Everyone starts with ${bbs} big blinds: ${feel}.` }
 }
 
+/** Empty table: show every game so nobody thinks there is only one. */
+export function GameChoices() {
+  return (
+    <section className="receipt rules js-panel" aria-label="Games you can play">
+      <h2 className="log__title">three ways to play</h2>
+      <ul className="choices">
+        {(Object.keys(MODES) as Mode[]).map(m => (
+          <li key={m}><b>{MODES[m]}</b><span>{MODE_INFO[m].tagline}</span></li>
+        ))}
+      </ul>
+      <p className="hint">The first person to sit down hosts the table and picks the game, the stakes and the turn timer.</p>
+    </section>
+  )
+}
+
 /** Read-only summary of the table's rules, for players who aren't hosting. */
 export function TableRules({ s }: { s: Settings }) {
   const info = MODE_INFO[s.mode]
   return (
-    <section className="receipt rules" aria-label="Table rules">
+    <section className="receipt rules js-panel" aria-label="Table rules">
       <h2 className="log__title">tonight's game</h2>
       <p className="rules__mode">{MODES[s.mode]}</p>
+      <p className="hint">The host picked this from No-Limit Hold'em, Limit Hold'em and Five-Card Draw.</p>
       <p>{info.how}</p>
       <p>{info.betting}</p>
       <dl className="rules__facts">
@@ -68,7 +85,7 @@ const HANDS: [string, string, string[]][] = [
 /** Collapsible cheat sheet: which hands beat which. */
 export function HandGuide() {
   return (
-    <details className="receipt guide">
+    <details className="receipt guide js-panel" onToggle={e => { const d = e.currentTarget; if (d.open) rowsIn([...d.querySelectorAll('.guide__list li')]) }}>
       <summary className="log__title">which hands win?</summary>
       <ol className="guide__list">
         {HANDS.map(([name, desc, cards]) => (

@@ -6,50 +6,140 @@ export const reduced = () => {
 
 // one place for the table's motion vocabulary
 export const EASE_OUT = 'out(4)'
-export const EASE_EXIT = 'out(2)'
+export const SHUFFLE_MS = 760
+export const DEAL_GAP = 75
 const d = (ms: number) => (reduced() ? 0 : ms)
+type Pt = { x: number; y: number }
 
-/** Cards fly in from the dealer spot (centre of the table) and settle into place. */
-export function dealIn(els: Element[], from: { x: number; y: number }, delay = 0) {
+/** Cards fly off the deck one at a time, in the order given (round the table from the button). */
+export function dealIn(els: Element[], from: Pt, delay = 0, onEach?: () => void) {
   els.forEach((el, i) => {
     const c = centre(el)
     animate(el, {
       x: { from: from.x - c.x, to: 0 },
       y: { from: from.y - c.y, to: 0 },
-      rotate: { from: -18 },
-      scale: { from: 0.6 },
-      opacity: { from: 0 },
-      duration: d(520),
-      delay: d(delay + i * 70),
+      rotate: { from: -24, to: 0 },
+      scale: { from: 0.5, to: 1 },
+      opacity: [{ from: 0, to: 1, duration: d(80) }],
+      duration: d(480),
+      delay: d(delay + i * DEAL_GAP),
+      ease: EASE_OUT,
+      onBegin: () => onEach?.(),
+    })
+  })
+}
+
+/** The dealer riffles the deck: halves split, lift, and fall back together twice. */
+export function riffle(left: Element | null, right: Element | null) {
+  if (!left || !right || reduced()) return
+  animate(left, { x: [0, -16, 0, -16, 0], y: [0, -6, 0, -6, 0], rotate: [0, -10, 0, -10, 0], duration: SHUFFLE_MS, ease: 'inOut(2)' })
+  animate(right, { x: [0, 16, 0, 16, 0], y: [0, -6, 0, -6, 0], rotate: [0, 10, 0, 10, 0], duration: SHUFFLE_MS, ease: 'inOut(2)' })
+}
+
+/** Board cards slide off the deck and turn face up. */
+export function dealBoard(els: Element[], from: Pt, delay = 0) {
+  els.forEach((el, i) => {
+    const c = centre(el)
+    animate(el, {
+      x: { from: from.x - c.x, to: 0 },
+      y: { from: from.y - c.y, to: 0 },
+      rotateY: [{ from: 90, to: 90, duration: d(380) }, { to: 0, duration: d(260) }],
+      opacity: [{ from: 0, to: 1, duration: d(60) }],
+      delay: d(delay + i * 110),
       ease: EASE_OUT,
     })
   })
 }
 
-/** Board card turn-over. */
-export function flipIn(els: Element[], delay = 0) {
-  if (!els.length) return
-  return animate(els, {
-    rotateY: { from: 90 },
-    y: { from: -14 },
-    opacity: { from: 0 },
-    duration: d(420),
-    delay: reduced() ? 0 : stagger(90, { start: delay }),
-    ease: EASE_OUT,
+/** A throwaway element: burn cards and chip stacks that travel and vanish. */
+function ghost(stage: HTMLElement, html: string, className: string, at: Pt) {
+  const r = stage.getBoundingClientRect()
+  const el = document.createElement('div')
+  el.className = className
+  el.innerHTML = html
+  el.style.left = `${at.x - r.left}px`
+  el.style.top = `${at.y - r.top}px`
+  el.setAttribute('aria-hidden', 'true')
+  stage.appendChild(el)
+  return el
+}
+
+/** Burn card: off the top of the deck, onto the muck. */
+export function burn(stage: HTMLElement | null, deck: Element | null, delay = 0) {
+  if (!stage || !deck || reduced()) return
+  const src = deck.querySelector('.card')
+  if (!src) return
+  const el = ghost(stage, src.outerHTML, 'ghost ghost--card', centre(deck))
+  animate(el, {
+    x: { to: 70 }, y: { to: 24 }, rotate: { to: 28 },
+    opacity: [{ to: 1, duration: 0 }, { to: 0, delay: 260, duration: 200 }],
+    duration: 460, delay, ease: EASE_OUT,
+    onComplete: () => el.remove(),
   })
+}
+
+const CHIP = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5" class="chip-inner"/></svg>'
+
+/** A chip stack travels between two points: bets into the pot, the pot to a winner. */
+export function chipTo(stage: HTMLElement | null, from: Pt, to: Pt, label: string, delay = 0) {
+  if (!stage || reduced()) return
+  const el = ghost(stage, CHIP + label, 'bet ghost', from)
+  animate(el, {
+    x: { to: to.x - from.x }, y: { to: to.y - from.y },
+    scale: [{ to: 1.1, duration: 120 }, { to: 0.8 }],
+    opacity: [{ to: 1, duration: 0 }, { to: 0, delay: 360, duration: 140 }],
+    duration: 520, delay, ease: 'inOut(3)',
+    onComplete: () => el.remove(),
+  })
+}
+
+/** Small hand flick each time the dealer releases a card. */
+export function flick(el: Element | null) {
+  if (!el || reduced()) return
+  animate(el, { rotate: [0, -16, 0], y: [0, -3, 0], duration: 160, ease: 'out(2)' })
+}
+
+/** Dealer's eyes glance toward a point. */
+export function look(el: Element | null, dx: number, dy: number) {
+  if (!el) return
+  animate(el, { x: dx, y: dy, duration: d(320), ease: EASE_OUT })
+}
+
+/** One-shot entrance for side panels: 40ms apart. */
+export function panelIn(els: Element[]) {
+  if (!els.length || reduced()) return
+  animate(els, { opacity: { from: 0, to: 1 }, y: { from: 14, to: 0 }, duration: 420, delay: stagger(40), ease: EASE_OUT })
+}
+
+/** Text swap when the explained thing changes (mode descriptions). */
+export function swapIn(els: Element[]) {
+  if (!els.length || reduced()) return
+  animate(els, { opacity: { from: 0, to: 1 }, y: { from: 6, to: 0 }, filter: { from: 'blur(4px)', to: 'blur(0px)' }, duration: 260, delay: stagger(40), ease: EASE_OUT })
+}
+
+/** Rows settle in when a list opens (hand guide). */
+export function rowsIn(els: Element[]) {
+  if (!els.length || reduced()) return
+  animate(els, { opacity: { from: 0, to: 1 }, x: { from: -8, to: 0 }, duration: 320, delay: stagger(28), ease: EASE_OUT })
+}
+
+/** Highlight glides to the selected option. */
+export function glideTo(el: HTMLElement | null, box: { top: number; height: number }, instant = false) {
+  if (!el) return
+  animate(el, { y: box.top, height: box.height, duration: instant ? 0 : d(300), ease: EASE_OUT })
 }
 
 /** The NOW ticket pops on — a named overshoot case (badge pop). */
 export function popIn(el: Element | null) {
   if (!el) return
-  return animate(el, { scale: { from: 0.7 }, rotate: { from: -6 }, duration: d(500), ease: reduced() ? 'linear' : spring({ bounce: 0.35, duration: 500 }) })
+  return animate(el, { scale: { from: 0.7, to: 1 }, rotate: { from: -6, to: 0 }, duration: d(500), ease: reduced() ? 'linear' : spring({ bounce: 0.35, duration: 500 }) })
 }
 
-/** Chips slide from a seat toward the pot / from the pot to a winner. */
-export function slide(el: Element | null, from: { x: number; y: number }) {
+/** A fresh bet slides out from the player's seat. */
+export function slide(el: Element | null, from: Pt) {
   if (!el) return
   const c = centre(el)
-  return animate(el, { x: { from: from.x - c.x, to: 0 }, y: { from: from.y - c.y, to: 0 }, opacity: { from: 0.2 }, duration: d(480), ease: EASE_OUT })
+  return animate(el, { x: { from: from.x - c.x, to: 0 }, y: { from: from.y - c.y, to: 0 }, opacity: { from: 0.2, to: 1 }, duration: d(480), ease: EASE_OUT })
 }
 
 /** Tween a number displayed in `el` from its previous value. */
