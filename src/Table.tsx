@@ -9,6 +9,7 @@ import { Dealer, type DealerApi } from './Dealer'
 import { Drawer, useDrawer, useMobile } from './Drawer'
 import { DEAL_GAP, SHUFFLE_MS, burn, centre, chipTo, countTo, dealBoard, dealIn, floatUp, glideTo, panelIn, popIn, rowsIn, shake, slide, swapIn } from './motion'
 import { saveName, savedName, useTable, type TableState } from './net'
+import { isMuted, setMuted, sfx } from './sound'
 
 const usePrev = <T,>(v: T) => {
   const r = useRef(v)
@@ -66,10 +67,23 @@ function TopBar({ code, state, online, send, drawerOpen, onDrawer }: {
           Leave seat
         </button>
       )}
+      <SoundToggle />
       <button className={`pill pill--btn${drawerOpen ? ' is-on' : ''}`} onClick={onDrawer} aria-expanded={drawerOpen} aria-controls="drawer">
         <Icon name="menu" />Table
       </button>
     </header>
+  )
+}
+
+function SoundToggle() {
+  const [off, setOff] = useState(isMuted)
+  return (
+    <button
+      className="pill pill--btn" aria-pressed={!off} title={off ? 'Sound is off' : 'Sound is on'}
+      onClick={() => { setMuted(!off); setOff(!off); if (off) setTimeout(() => sfx('chips'), 0) }}
+    >
+      <Icon name={off ? 'soundOff' : 'sound'} />{off ? 'Sound off' : 'Sound'}
+    </button>
   )
 }
 
@@ -192,20 +206,30 @@ function Stage({ state, send, drawerOpen, toggleDrawer }: { state: TableState; s
     const pot = stage.querySelector('.pot')
     const potPt = pot ? centre(pot) : toClient({ x: 50, y: 55 })
     const swept = v.handNo === prevHand && prevBets.length > 0 && bets.length === 0
-    if (swept) prevBets.forEach((b, i) => chipTo(stage, toClient(b.pos), potPt, b.amount.toLocaleString(), i * 40))
+    if (swept) prevBets.forEach((b, i) => chipTo(stage, toClient(b.pos), potPt, b.amount.toLocaleString(), i * 40, i === 0 ? 'chips' : undefined))
     if (v.phase === 'showdown') {
       v.winners.forEach((w, i) => {
         const av = stage.querySelector(`[data-seat="${w.seat}"] .seat__avatar`)
-        if (av) chipTo(stage, potPt, centre(av), w.amount.toLocaleString(), (swept ? 560 : 120) + i * 80)
+        if (av) chipTo(stage, potPt, centre(av), w.amount.toLocaleString(), (swept ? 560 : 120) + i * 80, i === 0 ? 'win' : undefined)
       })
     }
   }, [v.phase, v.handNo]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // the dealer watches whoever is acting
+  // the dealer watches whoever is acting; a soft chime when it's you
   useLayoutEffect(() => {
     const av = v.toAct >= 0 ? stageRef.current?.querySelector(`[data-seat="${v.toAct}"] .seat__avatar`) : null
     dealer.current?.lookAt(av ? centre(av) : null)
+    if (v.toAct >= 0 && v.toAct === v.me) sfx('turn')
   }, [v.toAct, layout.length])
+
+  // a check is a knock on the table, a fold is a card tossed away
+  const lastLine = v.log.at(-1) ?? ''
+  const heard = useRef(false)
+  useEffect(() => {
+    if (!heard.current) { heard.current = true; return } // not on page load, only for new actions
+    if (/ checks$/.test(lastLine)) sfx('knock')
+    else if (/ folds$/.test(lastLine)) sfx('deal', 0.7)
+  }, [lastLine])
 
   const winners = new Map(v.winners.map(w => [w.seat, w]))
   const acting = v.toAct
@@ -293,7 +317,7 @@ function SeatSpot(p: {
           </div>
         )}
         <div className="seat__avatar" ref={avatarRef} aria-hidden="true">
-          {acting && <TurnRing state={p.state} ticketRef={ticketRef} />}
+          {acting && <TurnRing state={p.state} ticketRef={ticketRef} mine={p.isMe} />}
           <span>{s.name.slice(0, 1).toUpperCase()}</span>
           {p.isButton && <span className="dealer-btn" title="Dealer">D</span>}
         </div>
@@ -329,7 +353,7 @@ function StackNum({ value }: { value: number }) {
 
 /** The signature move: an ink ring that drains around whoever is acting, driven by an anime.js timer.
  *  The ticket's handwriting gets bouncier as time runs out (Shantell Sans BNCE/INFM axes). */
-function TurnRing({ state, ticketRef }: { state: TableState; ticketRef: React.RefObject<HTMLDivElement | null> }) {
+function TurnRing({ state, ticketRef, mine }: { state: TableState; ticketRef: React.RefObject<HTMLDivElement | null>; mine: boolean }) {
   const ring = useRef<SVGCircleElement>(null)
   const total = state.view.settings.turnSeconds * 1000
   useEffect(() => {
@@ -342,7 +366,10 @@ function TurnRing({ state, ticketRef }: { state: TableState; ticketRef: React.Re
         const elapsed = startElapsed + (1 - startElapsed) * self.progress
         ring.current?.style.setProperty('stroke-dashoffset', String(elapsed))
         const left = Math.ceil((remaining * (1 - self.progress)) / 1000)
-        if (secs) secs.textContent = `${left}s`
+        if (secs && secs.textContent !== `${left}s`) {
+          secs.textContent = `${left}s`
+          if (mine && left <= 5 && left > 0) sfx('tick') // only your own clock ticks, so the table isn't noisy
+        }
         const t = ticketRef.current
         if (t) {
           const u = Math.max(0, (elapsed - 0.55) / 0.45)

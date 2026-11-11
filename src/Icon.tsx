@@ -7,6 +7,8 @@ const PATHS = {
   plus: 'M12 5v14 M5 12h14',
   arrow: 'M5 12h14 M13 6l6 6-6 6',
   menu: 'M4 7h16 M4 12h16 M4 17h10',
+  sound: 'M4 9.5h3l4.5-4v13l-4.5-4H4z M15 9a4 4 0 0 1 0 6 M17.5 6.5a7.5 7.5 0 0 1 0 11',
+  soundOff: 'M4 9.5h3l4.5-4v13l-4.5-4H4z M15.5 9.5l5 5 M20.5 9.5l-5 5',
 } as const
 
 export function Icon({ name, title }: { name: keyof typeof PATHS; title?: string }) {

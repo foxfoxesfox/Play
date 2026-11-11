@@ -1,4 +1,5 @@
 import { animate, spring, stagger, type JSAnimation } from 'animejs'
+import { sfx, type Sfx } from './sound'
 
 export const reduced = () => {
   try { return matchMedia('(prefers-reduced-motion: reduce)').matches } catch { return false }
@@ -11,10 +12,19 @@ export const DEAL_GAP = 75
 const d = (ms: number) => (reduced() ? 0 : ms)
 type Pt = { x: number; y: number }
 
+/** Safety net: a dealt card must never stay hidden, whatever happened to its animation. */
+function settle(el: Element, at: number) {
+  setTimeout(() => {
+    const h = el as HTMLElement
+    if (getComputedStyle(h).opacity !== '1' || /rotateY\((?!0deg)/.test(h.style.transform)) { h.style.opacity = ''; h.style.transform = '' }
+  }, at)
+}
+
 /** Cards fly off the deck one at a time, in the order given (round the table from the button). */
 export function dealIn(els: Element[], from: Pt, delay = 0, onEach?: () => void) {
   els.forEach((el, i) => {
     const c = centre(el)
+    settle(el, d(delay + i * DEAL_GAP) + 1500)
     animate(el, {
       x: { from: from.x - c.x, to: 0 },
       y: { from: from.y - c.y, to: 0 },
@@ -24,14 +34,16 @@ export function dealIn(els: Element[], from: Pt, delay = 0, onEach?: () => void)
       duration: d(480),
       delay: d(delay + i * DEAL_GAP),
       ease: EASE_OUT,
-      onBegin: () => onEach?.(),
+      onBegin: () => { sfx('deal'); onEach?.() },
     })
   })
 }
 
 /** The dealer riffles the deck: halves split, lift, and fall back together twice. */
 export function riffle(left: Element | null, right: Element | null) {
-  if (!left || !right || reduced()) return
+  if (!left || !right) return
+  sfx('shuffle')
+  if (reduced()) return
   animate(left, { x: [0, -16, 0, -16, 0], y: [0, -6, 0, -6, 0], rotate: [0, -10, 0, -10, 0], duration: SHUFFLE_MS, ease: 'inOut(2)' })
   animate(right, { x: [0, 16, 0, 16, 0], y: [0, -6, 0, -6, 0], rotate: [0, 10, 0, 10, 0], duration: SHUFFLE_MS, ease: 'inOut(2)' })
 }
@@ -40,13 +52,17 @@ export function riffle(left: Element | null, right: Element | null) {
 export function dealBoard(els: Element[], from: Pt, delay = 0) {
   els.forEach((el, i) => {
     const c = centre(el)
+    settle(el, d(delay + i * 110) + 1500)
+    // one continuous slide-and-turn: never parked edge-on (invisible) between steps
     animate(el, {
       x: { from: from.x - c.x, to: 0 },
       y: { from: from.y - c.y, to: 0 },
-      rotateY: [{ from: 90, to: 90, duration: d(380) }, { to: 0, duration: d(260) }],
-      opacity: [{ from: 0, to: 1, duration: d(60) }],
+      rotateY: { from: 90, to: 0 },
+      opacity: { from: 0, to: 1 },
+      duration: d(560),
       delay: d(delay + i * 110),
       ease: EASE_OUT,
+      onBegin: () => sfx('flip'),
     })
   })
 }
@@ -71,6 +87,7 @@ export function burn(stage: HTMLElement | null, deck: Element | null, delay = 0)
   if (!src) return
   const el = ghost(stage, src.outerHTML, 'ghost ghost--card', centre(deck))
   animate(el, {
+    onBegin: () => sfx('deal', 0.6),
     x: { to: 70 }, y: { to: 24 }, rotate: { to: 28 },
     opacity: [{ to: 1, duration: 0 }, { to: 0, delay: 260, duration: 200 }],
     duration: 460, delay, ease: EASE_OUT,
@@ -81,10 +98,12 @@ export function burn(stage: HTMLElement | null, deck: Element | null, delay = 0)
 const CHIP = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5" class="chip-inner"/></svg>'
 
 /** A chip stack travels between two points: bets into the pot, the pot to a winner. */
-export function chipTo(stage: HTMLElement | null, from: Pt, to: Pt, label: string, delay = 0) {
-  if (!stage || reduced()) return
+export function chipTo(stage: HTMLElement | null, from: Pt, to: Pt, label: string, delay = 0, sound?: Sfx) {
+  if (!stage) return
+  if (reduced()) { if (sound) setTimeout(() => sfx(sound), delay); return }
   const el = ghost(stage, CHIP + label, 'bet ghost', from)
   animate(el, {
+    onBegin: () => { if (sound) sfx(sound) },
     x: { to: to.x - from.x }, y: { to: to.y - from.y },
     scale: [{ to: 1.1, duration: 120 }, { to: 0.8 }],
     opacity: [{ to: 1, duration: 0 }, { to: 0, delay: 360, duration: 140 }],
@@ -177,6 +196,7 @@ export function popIn(el: Element | null) {
 export function slide(el: Element | null, from: Pt) {
   if (!el) return
   const c = centre(el)
+  sfx('chips')
   return animate(el, { x: { from: from.x - c.x, to: 0 }, y: { from: from.y - c.y, to: 0 }, opacity: { from: 0.2, to: 1 }, duration: d(480), ease: EASE_OUT })
 }
 
