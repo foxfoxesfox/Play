@@ -17,24 +17,26 @@ export function setMuted(m: boolean) {
   try { localStorage.setItem(KEY, m ? 'off' : 'on') } catch { /* private mode */ }
 }
 
-// browsers only allow audio after a user gesture, so the context starts on the first tap or key
+// Browsers only start audio inside a real user gesture, and which events count differs:
+// a touch pointerdown doesn't (touchend/click do), and Safari re-suspends audio after the tab
+// is backgrounded. So every gesture re-tries until the context is actually running.
 function unlock() {
-  if (ctx) return
-  ctx = new AudioContext()
-  for (const f of FILES) {
-    fetch(`/sounds/${f}.mp3`)
-      .then(r => r.arrayBuffer())
-      .then(b => ctx!.decodeAudioData(b))
-      .then(buf => buffers.set(f, buf))
-      .catch(() => { /* a missing clip just stays silent */ })
+  if (!ctx) {
+    ctx = new AudioContext()
+    for (const f of FILES) {
+      fetch(`/sounds/${f}.mp3`)
+        .then(r => r.arrayBuffer())
+        .then(b => ctx!.decodeAudioData(b))
+        .then(buf => buffers.set(f, buf))
+        .catch(() => { /* a missing clip just stays silent */ })
+    }
   }
+  if (ctx.state !== 'running') void ctx.resume().catch(() => {})
 }
-addEventListener('pointerdown', unlock, { once: true })
-addEventListener('keydown', unlock, { once: true })
+for (const ev of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) addEventListener(ev, unlock, { capture: true, passive: true })
 
 export function sfx(name: Sfx, volume = 1) {
-  if (muted || !ctx) return
-  if (ctx.state === 'suspended') void ctx.resume()
+  if (muted || !ctx || ctx.state !== 'running') return
   const file = name === 'deal' ? `deal${(dealTurn++ % 3) + 1}` : name
   const buf = buffers.get(file)
   if (!buf) return

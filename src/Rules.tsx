@@ -1,7 +1,6 @@
 import { BLIND_LEVEL_HANDS, MODES, type Mode, type Settings } from '../shared/poker'
 import { useRef } from 'react'
 import { Card } from './Card'
-import { Icon } from './Icon'
 import { centre, flipClose, flipOpen, rowsIn } from './motion'
 
 // Plain-language rules for people who don't play much poker.
@@ -109,10 +108,9 @@ export function HandGuide() {
 
   return (
     <>
-      <button ref={btnRef} className="receipt guide-btn js-panel" onClick={open} aria-haspopup="dialog">
+      <button ref={btnRef} className="table-tool table-tool--guide" onClick={open} aria-haspopup="dialog">
         <span className="guide-btn__cards" aria-hidden="true"><Card card="Ah" /><Card card="Kh" /></span>
         which hands win?
-        <Icon name="arrow" />
       </button>
       <dialog
         ref={dlgRef}

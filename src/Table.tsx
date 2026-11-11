@@ -7,7 +7,7 @@ import { Icon } from './Icon'
 import { GameChoices, HandGuide, MODE_INFO, SETTING_HINT, TableRules, depth } from './Rules'
 import { Dealer, type DealerApi } from './Dealer'
 import { Drawer, useDrawer, useMobile } from './Drawer'
-import { DEAL_GAP, SHUFFLE_MS, centre, gather, toPile, chipTo, countTo, dealBoard, dealIn, floatUp, glideTo, panelIn, popIn, rowsIn, shake, slide, swapIn } from './motion'
+import { DEAL_GAP, SHUFFLE_MS, centre, gather, popClose, popOpen, toPile, chipTo, countTo, dealBoard, dealIn, floatUp, glideTo, panelIn, popIn, rowsIn, shake, slide, swapIn } from './motion'
 import { saveName, savedName, useTable, type TableState } from './net'
 import { isMuted, setMuted, sfx } from './sound'
 
@@ -118,8 +118,6 @@ function Room({ state, send, drawer, mobile }: { state: TableState; send: Send; 
           {v.isHost && <HostPanel state={state} send={send} />}
           {v.hostSeat < 0 && <GameChoices />}
           {v.hostSeat >= 0 && !v.isHost && <TableRules s={v.settings} />}
-          <HandLog v={v} />
-          <HandGuide />
         </div>
       </Drawer>
     </main>
@@ -285,6 +283,8 @@ function Stage({ state, send, drawerOpen, toggleDrawer }: { state: TableState; s
           <EmptySeat key={k} k={k} pos={seat} send={send} />
         )
       })}
+      <HandGuide />
+      <LogButton v={v} />
       {v.me < 0 && <JoinForm send={send} hosting={v.hostSeat < 0} />}
       {v.phase === 'lobby' && v.me >= 0 && <LobbyNote state={state} send={send} drawerOpen={drawerOpen} toggleDrawer={toggleDrawer} />}
     </div>
@@ -544,6 +544,33 @@ function MyHand({ v, send }: { v: View; send: Send }) {
 }
 
 // ---------------- side column ----------------
+
+/** "Hand log" button in the table corner: shows the latest action, opens the full log as a small receipt. */
+function LogButton({ v }: { v: View }) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
+  const close = () => { if (popRef.current) popClose(popRef.current, () => setOpen(false)); else setOpen(false) }
+  useLayoutEffect(() => { if (open && popRef.current) popOpen(popRef.current) }, [open])
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => { if (!wrapRef.current?.contains(e.target as Node)) close() }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    addEventListener('pointerdown', onDown)
+    addEventListener('keydown', onKey)
+    return () => { removeEventListener('pointerdown', onDown); removeEventListener('keydown', onKey) }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  const last = v.log.at(-1) ?? ''
+  return (
+    <div className="table-tool-wrap" ref={wrapRef}>
+      {open && <div className="log-pop" ref={popRef} id="hand-log"><HandLog v={v} /></div>}
+      <button className="table-tool table-tool--log" onClick={() => (open ? close() : setOpen(true))} aria-expanded={open} aria-controls="hand-log">
+        <Icon name="menu" />
+        <span className="table-tool__last">{last ? cardsInText(last.replace(/^— /, '')) : 'hand log'}</span>
+      </button>
+    </div>
+  )
+}
 
 function HandLog({ v }: { v: View }) {
   const start = v.log.findLastIndex(l => l.startsWith('—'))

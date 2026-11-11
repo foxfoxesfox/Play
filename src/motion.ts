@@ -223,6 +223,16 @@ export function glideTo(el: HTMLElement | null, box: { top: number; height: numb
   animate(el, { y: box.top, height: box.height, duration: instant ? 0 : d(300), ease: EASE_OUT })
 }
 
+/** A small popover grows out of its button (transform-origin is set in CSS) and shrinks back, faster, on close. */
+export function popOpen(el: HTMLElement) {
+  if (reduced()) return animate(el, { opacity: { from: 0, to: 1 }, duration: 120 })
+  animate(el, { opacity: { from: 0, to: 1 }, scale: { from: 0.92, to: 1 }, y: { from: 8, to: 0 }, duration: 240, ease: EASE_OUT })
+}
+export function popClose(el: HTMLElement, done: () => void) {
+  if (reduced()) return done()
+  animate(el, { opacity: { to: 0 }, scale: { to: 0.95 }, y: { to: 6 }, duration: 150, ease: 'out(2)', onComplete: done })
+}
+
 /** The NOW ticket pops on — a named overshoot case (badge pop). */
 export function popIn(el: Element | null) {
   if (!el) return
