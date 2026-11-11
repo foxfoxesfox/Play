@@ -143,6 +143,11 @@ button.card:hover { translate: 0 -4px; }
 .deck__half .card { --cw: 100%; position: absolute; inset: 0; width: 100%; }
 .deck__half .card + .card { translate: 1.5px -2px; }
 .deck__half + .deck__half { translate: 3px -4px; }
+/* discard pile: burn cards and folded hands, face down beside the deck */
+.pile { position: absolute; left: calc(50% + clamp(34px, 8cqi, 80px)); top: 20%; translate: -50% -50%; z-index: 1; display: grid; place-items: center; width: clamp(22px, 4.2cqi, 46px); aspect-ratio: 100 / 140; }
+.pile .card { --cw: 100%; grid-area: 1 / 1; width: 100%; }
+.pile__empty { grid-area: 1 / 1; width: 100%; height: 100%; border: 2px dashed var(--ink-faint); border-radius: 7px; }
+.pile__label { position: absolute; top: calc(100% + 4px); left: 50%; translate: -50% 0; white-space: nowrap; font-size: clamp(10px, 1.3cqi, 12px); color: var(--ink-soft); }
 .ghost { position: absolute; translate: -50% -50%; z-index: 6; pointer-events: none; opacity: 0; }
 .ghost--card .card { --cw: clamp(22px, 4.2cqi, 46px); }
 

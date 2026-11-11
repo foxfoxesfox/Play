@@ -66,6 +66,7 @@ export interface Game {
   showCards: boolean
   results?: HandResult[] // set when a hand finishes, for the leaderboard
   deadMoney?: number // chips from players who left mid-hand
+  burned?: number // face-down burn cards this hand; only the count is ever shown
 }
 
 export type Action =
@@ -85,13 +86,21 @@ export function newGame(settings: Settings = DEFAULT_SETTINGS): Game {
 
 export const fullDeck = (): Card[] => [...RANKS].flatMap(r => [...SUITS].map(s => r + s))
 
+/** Uniform random integer in [0, n) from the platform's cryptographic RNG.
+ *  Draws that land in the uneven top slice of the 32-bit range are rejected, so there is no modulo bias. */
+function randomBelow(n: number) {
+  const limit = 2 ** 32 - (2 ** 32 % n)
+  const r = new Uint32Array(1)
+  do crypto.getRandomValues(r)
+  while (r[0] >= limit)
+  return r[0] % n
+}
+
+/** Fisher–Yates: every one of the 52! deck orders is equally likely. */
 export function cryptoShuffle(cards: Card[]): Card[] {
   const a = [...cards]
-  const r = new Uint32Array(a.length)
-  crypto.getRandomValues(r)
-  // shortcut: modulo bias is ~1e-8 for a 52-card deck, negligible for play chips
   for (let i = a.length - 1; i > 0; i--) {
-    const j = r[i] % (i + 1)
+    const j = randomBelow(i + 1)
     ;[a[i], a[j]] = [a[j], a[i]]
   }
   return a
@@ -166,9 +175,16 @@ export function startHand(g: Game, shuffle: (c: Card[]) => Card[] = cryptoShuffl
   g.results = []
   g.showCards = false
   g.deadMoney = 0
+  g.burned = 0
   g.button = nextSeat(g, g.button, s => s.inHand)
   const n = isHoldem(g) ? 2 : 5
-  for (let c = 0; c < n; c++) for (const s of g.seats) if (s?.inHand) s.hole.push(g.deck.pop()!)
+  // one card at a time round the table, starting left of the button, like a real dealer
+  for (let c = 0; c < n; c++) {
+    for (let k = 1; k <= MAX_SEATS; k++) {
+      const s = g.seats[(g.button + k) % MAX_SEATS]
+      if (s?.inHand) s.hole.push(g.deck.pop()!)
+    }
+  }
 
   const headsUp = g.seats.filter(s => s?.inHand).length === 2
   const sbSeat = headsUp ? g.button : nextSeat(g, g.button, s => s.inHand)
@@ -294,6 +310,7 @@ function nextStreet(g: Game) {
   g.toAct = -1
   const order: Phase[] = isHoldem(g) ? ['preflop', 'flop', 'turn', 'river', 'showdown'] : ['bet1', 'draw', 'bet2', 'showdown']
   g.phase = order[order.indexOf(g.phase) + 1]
+  if (g.phase === 'flop' || g.phase === 'turn' || g.phase === 'river') { g.deck.pop(); g.burned = (g.burned ?? 0) + 1 }
   if (g.phase === 'flop') g.board.push(g.deck.pop()!, g.deck.pop()!, g.deck.pop()!)
   if (g.phase === 'turn' || g.phase === 'river') g.board.push(g.deck.pop()!)
   if (g.board.length && isHoldem(g) && g.phase !== 'showdown') log(g, `${g.phase}: ${g.board.join(' ')}`)
@@ -428,6 +445,7 @@ export function viewFor(g: Game, playerId: string | null) {
     bb: g.bb,
     pot: g.phase === 'showdown' ? 0 : pot,
     log: g.log.slice(-30),
+    burned: g.burned ?? 0,
     winners: g.winners,
     me,
     isHost: !!playerId && g.hostId === playerId,

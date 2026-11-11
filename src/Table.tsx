@@ -7,7 +7,7 @@ import { Icon } from './Icon'
 import { GameChoices, HandGuide, MODE_INFO, SETTING_HINT, TableRules, depth } from './Rules'
 import { Dealer, type DealerApi } from './Dealer'
 import { Drawer, useDrawer, useMobile } from './Drawer'
-import { DEAL_GAP, SHUFFLE_MS, burn, centre, chipTo, countTo, dealBoard, dealIn, floatUp, glideTo, panelIn, popIn, rowsIn, shake, slide, swapIn } from './motion'
+import { DEAL_GAP, SHUFFLE_MS, centre, gather, toPile, chipTo, countTo, dealBoard, dealIn, floatUp, glideTo, panelIn, popIn, rowsIn, shake, slide, swapIn } from './motion'
 import { saveName, savedName, useTable, type TableState } from './net'
 import { isMuted, setMuted, sfx } from './sound'
 
@@ -195,7 +195,8 @@ function Stage({ state, send, drawerOpen, toggleDrawer }: { state: TableState; s
     const holeCards = document.querySelectorAll('.js-deal').length
     const wait = (v.handNo === prevHand ? 0 : SHUFFLE_MS + holeCards * DEAL_GAP + 300) + (prevBets.length ? 520 : 0)
     utils.set(els, { opacity: 0 })
-    burn(stageRef.current, dealer.current?.deck() ?? null, wait)
+    const landed = toPile(stageRef.current, dealer.current?.deck() ?? null, dealer.current?.pile() ?? null, null, 1, wait)
+    pileAt.current = Math.max(pileAt.current, landed)
     dealBoard(els, from, wait + 240)
   }, [v.board.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -214,6 +215,28 @@ function Stage({ state, send, drawerOpen, toggleDrawer }: { state: TableState; s
       })
     }
   }, [v.phase, v.handNo]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // discard pile: burn cards plus folded hands. It grows when cards land, and is gathered into the deck each new hand.
+  const discards = v.burned + v.seats.reduce((t, s) => t + (s?.inHand && s.folded ? s.cardCount : 0), 0)
+  const [pile, setPile] = useState(discards)
+  const pileAt = useRef(0) // ms until the cards on their way have landed
+  const foldedKey = v.seats.map(s => (s?.inHand && s.folded ? 1 : 0)).join('')
+  const prevFolded = usePrev(foldedKey)
+  useLayoutEffect(() => {
+    if (v.handNo !== prevHand || !stageRef.current) return
+    v.seats.forEach((s, k) => {
+      if (!s || foldedKey[k] !== '1' || prevFolded[k] === '1') return
+      const av = stageRef.current!.querySelector(`[data-seat="${k}"] .seat__avatar`)
+      const landed = toPile(stageRef.current, dealer.current?.deck() ?? null, dealer.current?.pile() ?? null, av ? centre(av) : null, Math.min(s.cardCount, 2))
+      pileAt.current = Math.max(pileAt.current, landed)
+    })
+  }, [foldedKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (discards < pile) { gather(dealer.current?.pile() ?? null, dealer.current?.deck() ?? null, () => setPile(discards)); return }
+    const t = setTimeout(() => setPile(discards), pileAt.current)
+    pileAt.current = 0
+    return () => clearTimeout(t)
+  }, [discards]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // the dealer watches whoever is acting; a soft chime when it's you
   useLayoutEffect(() => {
@@ -239,7 +262,7 @@ function Stage({ state, send, drawerOpen, toggleDrawer }: { state: TableState; s
         <ellipse cx="500" cy="310" rx="440" ry="255" className="table-line" filter="url(#wobble)" />
         <ellipse cx="500" cy="310" rx="330" ry="180" className="turn-path" />
       </svg>
-      <Dealer ref={dealer} />
+      <Dealer ref={dealer} discards={pile} />
 
       <div className="centre">
         <div className="board" aria-label="Board">

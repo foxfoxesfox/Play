@@ -4,14 +4,19 @@ import { centre, flick, look, riffle } from './motion'
 
 export interface DealerApi {
   deck: () => HTMLElement | null
+  pile: () => HTMLElement | null
   shuffle: () => void
   flick: () => void
   lookAt: (p: { x: number; y: number } | null) => void
 }
 
-/** The drawn dealer in a striped visor, sitting at the top of the table with the deck in front. */
-export function Dealer({ ref }: { ref: Ref<DealerApi> }) {
+// a few fixed tilts so the pile looks tossed, not stacked
+const TILTS = [-8, 6, -3, 11, -12, 4]
+
+/** The drawn dealer in a striped visor, at the top of the table with the deck and discard pile in front. */
+export function Dealer({ ref, discards }: { ref: Ref<DealerApi>; discards: number }) {
   const deckRef = useRef<HTMLDivElement>(null)
+  const pileRef = useRef<HTMLDivElement>(null)
   const leftRef = useRef<HTMLDivElement>(null)
   const rightRef = useRef<HTMLDivElement>(null)
   const handRef = useRef<SVGGElement>(null)
@@ -19,6 +24,7 @@ export function Dealer({ ref }: { ref: Ref<DealerApi> }) {
 
   useImperativeHandle(ref, () => ({
     deck: () => deckRef.current,
+    pile: () => pileRef.current,
     shuffle: () => riffle(leftRef.current, rightRef.current),
     flick: () => flick(handRef.current),
     lookAt: p => {
@@ -62,6 +68,13 @@ export function Dealer({ ref }: { ref: Ref<DealerApi> }) {
       <div className="deck" ref={deckRef}>
         <div className="deck__half" ref={leftRef}><Card back /><Card back /></div>
         <div className="deck__half" ref={rightRef}><Card back /><Card back /></div>
+      </div>
+      <div className="pile" ref={pileRef} role="img" aria-label={`Discard pile: ${discards} card${discards === 1 ? '' : 's'} burned or folded`} title="Discards: burn cards and folded hands">
+        {Array.from({ length: Math.min(discards, TILTS.length) }, (_, i) => (
+          <Card key={i} back style={{ rotate: `${TILTS[i]}deg` }} />
+        ))}
+        {discards === 0 && <span className="pile__empty" aria-hidden="true" />}
+        <span className="pile__label">{discards > 0 ? `discards · ${discards}` : 'discards'}</span>
       </div>
     </>
   )

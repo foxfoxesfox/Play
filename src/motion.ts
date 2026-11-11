@@ -90,18 +90,45 @@ function ghost(stage: HTMLElement, html: string, className: string, at: Pt) {
   return el
 }
 
-/** Burn card: off the top of the deck, onto the muck. */
-export function burn(stage: HTMLElement | null, deck: Element | null, delay = 0) {
-  if (!stage || !deck || reduced()) return
-  const src = deck.querySelector('.card')
-  if (!src) return
-  const el = ghost(stage, src.outerHTML, 'ghost ghost--card', centre(deck))
-  animate(el, {
-    onBegin: () => sfx('deal', 0.6),
-    x: { to: 70 }, y: { to: 24 }, rotate: { to: 28 },
-    opacity: [{ to: 1, duration: 0 }, { to: 0, delay: 260, duration: 200 }],
-    duration: 460, delay, ease: EASE_OUT,
-    onComplete: () => el.remove(),
+export const TO_PILE_MS = 480
+
+/** Face-down cards slide onto the discard pile: burn cards off the deck, or a folded hand.
+ *  Returns when they land (ms from now), so the pile can grow at that moment. */
+export function toPile(stage: HTMLElement | null, deck: Element | null, pile: Element | null, from: Pt | null, count = 1, delay = 0): number {
+  const src = deck?.querySelector('.card')
+  if (!stage || !src || !pile || reduced()) return 0
+  const start = from ?? centre(deck!)
+  const to = centre(pile)
+  for (let i = 0; i < count; i++) {
+    const el = ghost(stage, src.outerHTML, 'ghost ghost--card', start)
+    animate(el, {
+      onBegin: () => { if (i === 0) sfx('deal', 0.6) },
+      x: { to: to.x - start.x }, y: { to: to.y - start.y }, rotate: { from: 0, to: 14 + i * 9 },
+      opacity: [{ to: 1, duration: 0 }, { to: 0, delay: TO_PILE_MS - 60, duration: 60 }],
+      duration: TO_PILE_MS, delay: delay + i * 70, ease: 'inOut(3)',
+      onComplete: () => el.remove(),
+    })
+  }
+  return delay + (count - 1) * 70 + TO_PILE_MS
+}
+
+/** New hand: the dealer sweeps the discard pile back into the deck. */
+export function gather(pile: Element | null, deck: Element | null, done: () => void) {
+  const cards = pile ? [...pile.querySelectorAll('.card')] : []
+  if (!cards.length || !deck || reduced()) return done()
+  const to = centre(deck)
+  cards.forEach((el, i) => {
+    const c = centre(el)
+    animate(el, {
+      x: { to: to.x - c.x }, y: { to: to.y - c.y }, rotate: { to: 0 }, opacity: [{ to: 0, delay: 220, duration: 100 }],
+      duration: 320, delay: i * 30, ease: 'inOut(3)',
+      onComplete: () => {
+        if (i !== cards.length - 1) return
+        done()
+        // after React drops the gathered cards, clear what's left so reused pile cards aren't stuck invisible
+        requestAnimationFrame(() => cards.forEach(c => { (c as HTMLElement).style.transform = ''; (c as HTMLElement).style.opacity = '' }))
+      },
+    })
   })
 }
 

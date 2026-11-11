@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { act, bestHand, compare, eval5, fullDeck, legal, newGame, sit, startHand, DEFAULT_SETTINGS, type Card, type Game, type Mode } from './poker'
+import { act, bestHand, compare, cryptoShuffle, eval5, fullDeck, legal, newGame, sit, startHand, DEFAULT_SETTINGS, type Card, type Game, type Mode } from './poker'
 
 /** Shuffle stub: the deck pops cards in exactly this order, then the rest. */
 const rig = (order: Card[]) => () => {
@@ -49,7 +49,8 @@ describe('no-limit hold\'em', () => {
 
   it('builds a side pot when a short stack is all-in', () => {
     const g = table([100, 300, 300])
-    startHand(g, rig(['Ac', 'Kc', 'Qc', 'Ad', 'Kd', 'Qd', '2c', '7d', '9h', '3s', '4d']))
+    // dealt left of the button (seat 0): seats 1, 2, 0, twice; then burn + flop, burn + turn, burn + river
+    startHand(g, rig(['Kc', 'Qc', 'Ac', 'Kd', 'Qd', 'Ad', 'Js', '2c', '7d', '9h', 'Jh', '3s', 'Jd', '4d']))
     expect(g.toAct).toBe(0)
     expect(act(g, 0, { type: 'raise', to: 100 })).toBeNull()
     expect(act(g, 1, { type: 'call' })).toBeNull()
@@ -74,7 +75,7 @@ describe('no-limit hold\'em', () => {
   it('splits a tied pot', () => {
     const g = table([1000, 1000])
     // both play the board (royal flush on board)
-    startHand(g, rig(['2c', '3d', '2d', '3c', 'Ah', 'Kh', 'Qh', 'Jh', 'Th']))
+    startHand(g, rig(['2c', '3d', '2d', '3c', '4s', 'Ah', 'Kh', 'Qh', '5s', 'Jh', '6s', 'Th']))
     act(g, g.toAct, { type: 'call' })
     act(g, g.toAct, { type: 'check' })
     while (g.phase !== 'showdown') act(g, g.toAct, { type: 'check' })
@@ -87,6 +88,24 @@ describe('no-limit hold\'em', () => {
     const other = (g.toAct + 1) % 3
     expect(act(g, other, { type: 'fold' })).toBe('Not your turn')
     expect(act(g, g.toAct, { type: 'raise', to: 30 })).toMatch(/between 40/)
+  })
+})
+
+describe('dealing', () => {
+  it('shuffles evenly: each card lands in each position about equally often', () => {
+    const counts = Array.from({ length: 4 }, () => [0, 0, 0, 0])
+    for (let n = 0; n < 40000; n++) cryptoShuffle(['a', 'b', 'c', 'd']).forEach((c, pos) => counts['abcd'.indexOf(c)][pos]++)
+    for (const row of counts) for (const x of row) expect(Math.abs(x - 10000)).toBeLessThan(500) // ±5%
+  })
+
+  it('burns a card before the flop, turn and river', () => {
+    const g = table([1000, 1000])
+    startHand(g)
+    expect(g.deck).toHaveLength(52 - 4)
+    while (g.phase !== 'showdown') act(g, g.toAct, { type: legal(g, g.toAct)!.canCheck ? 'check' : 'call' })
+    expect(g.burned).toBe(3)
+    expect(g.board).toHaveLength(5)
+    expect(g.deck).toHaveLength(52 - 4 - 3 - 5)
   })
 })
 
