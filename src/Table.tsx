@@ -106,6 +106,10 @@ function Room({ state, send, drawer, mobile }: { state: TableState; send: Send; 
     <main className="room" ref={roomRef}>
       <section className="felt-area" aria-label="Poker table">
         <Stage state={state} send={send} drawerOpen={drawer.open} toggleDrawer={drawer.toggle} />
+        <div className="table-tools">
+          <LogButton v={v} />
+          <HandGuide />
+        </div>
         {seated && (
           <div className="play-row">
             <MyHand v={v} send={send} />
@@ -283,8 +287,6 @@ function Stage({ state, send, drawerOpen, toggleDrawer }: { state: TableState; s
           <EmptySeat key={k} k={k} pos={seat} send={send} />
         )
       })}
-      <HandGuide />
-      <LogButton v={v} />
       {v.me < 0 && <JoinForm send={send} hosting={v.hostSeat < 0} />}
       {v.phase === 'lobby' && v.me >= 0 && <LobbyNote state={state} send={send} drawerOpen={drawerOpen} toggleDrawer={toggleDrawer} />}
     </div>
@@ -545,7 +547,7 @@ function MyHand({ v, send }: { v: View; send: Send }) {
 
 // ---------------- side column ----------------
 
-/** "Hand log" button in the table corner: shows the latest action, opens the full log as a small receipt. */
+/** "History" button: shows the latest action, opens the hand history as a small receipt. */
 function LogButton({ v }: { v: View }) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -566,7 +568,8 @@ function LogButton({ v }: { v: View }) {
       {open && <div className="log-pop" ref={popRef} id="hand-log"><HandLog v={v} /></div>}
       <button className="table-tool table-tool--log" onClick={() => (open ? close() : setOpen(true))} aria-expanded={open} aria-controls="hand-log">
         <Icon name="menu" />
-        <span className="table-tool__last">{last ? cardsInText(last.replace(/^— /, '')) : 'hand log'}</span>
+        <b>History</b>
+        {last && <span className="table-tool__last">{cardsInText(last.replace(/^— /, ''))}</span>}
       </button>
     </div>
   )
