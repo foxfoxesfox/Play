@@ -12,6 +12,14 @@ export const DEAL_GAP = 75
 const d = (ms: number) => (reduced() ? 0 : ms)
 type Pt = { x: number; y: number }
 
+/** A landed card drops its finished transform: a leftover 3D transform keeps it on a
+ *  compositor layer rasterised mid-flight, which is what made board cards look blurry. */
+function land(el: Element) {
+  const h = el as HTMLElement
+  h.style.transform = ''
+  h.style.opacity = ''
+}
+
 /** Safety net: a dealt card must never stay hidden, whatever happened to its animation. */
 function settle(el: Element, at: number) {
   setTimeout(() => {
@@ -35,6 +43,7 @@ export function dealIn(els: Element[], from: Pt, delay = 0, onEach?: () => void)
       delay: d(delay + i * DEAL_GAP),
       ease: EASE_OUT,
       onBegin: () => { sfx('deal'); onEach?.() },
+      onComplete: () => land(el),
     })
   })
 }
@@ -63,6 +72,7 @@ export function dealBoard(els: Element[], from: Pt, delay = 0) {
       delay: d(delay + i * 110),
       ease: EASE_OUT,
       onBegin: () => sfx('flip'),
+      onComplete: () => land(el),
     })
   })
 }

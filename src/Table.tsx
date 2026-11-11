@@ -203,7 +203,7 @@ function Stage({ state, send, drawerOpen, toggleDrawer }: { state: TableState; s
   useLayoutEffect(() => {
     const stage = stageRef.current
     if (!stage || v.phase === prevPhase) return
-    const pot = stage.querySelector('.pot')
+    const pot = stage.querySelector('.pot, .result')
     const potPt = pot ? centre(pot) : toClient({ x: 50, y: 55 })
     const swept = v.handNo === prevHand && prevBets.length > 0 && bets.length === 0
     if (swept) prevBets.forEach((b, i) => chipTo(stage, toClient(b.pos), potPt, b.amount.toLocaleString(), i * 40, i === 0 ? 'chips' : undefined))
@@ -243,7 +243,7 @@ function Stage({ state, send, drawerOpen, toggleDrawer }: { state: TableState; s
 
       <div className="centre">
         <div className="board" aria-label="Board">
-          {v.board.map(c => <Card key={c} card={c} />)}
+          {v.board.map(c => <Card key={c} card={c} className={showdownMark(v, c)} />)}
           {v.settings.mode !== 'draw5' && v.phase !== 'lobby' &&
             Array.from({ length: 5 - v.board.length }, (_, i) => <div key={'e' + i} className="card card--slot" aria-hidden="true" />)}
         </div>
@@ -274,15 +274,47 @@ function Pot({ v }: { v: View }) {
   const prev = usePrev(amount)
   useLayoutEffect(() => { countTo(ref.current, prev, amount) }, [amount]) // eslint-disable-line react-hooks/exhaustive-deps
   if (v.phase === 'lobby') return null
+  if (v.phase === 'showdown' && v.winners.length) return <Result v={v} />
   const L = v.legal
   return (
     <div className="receipt pot" aria-live="polite">
       <span className="receipt__label">pot</span>
       <b ref={ref} className="pot__amt">{amount.toLocaleString()}</b>
       {L && L.callAmount > 0 && <span className="receipt__sub">to call {L.callAmount}</span>}
-      {v.phase === 'showdown' && v.winners[0] && (
-        <span className="receipt__sub">{v.winners[0].hand ? v.winners[0].hand.toLowerCase() + ' takes it' : 'everyone else folded'}</span>
+    </div>
+  )
+}
+
+/** Cards were turned face up at this showdown (not a fold-win). */
+const revealed = (v: View) => v.phase === 'showdown' && v.winners.some(w => w.cards.length > 0)
+
+/** At a revealed showdown, the five winning cards lift and the rest dim. */
+function showdownMark(v: View, c: string | null) {
+  if (!c || !revealed(v)) return ''
+  return v.winners.some(w => w.cards.includes(c)) ? ' card--win' : ' card--lose'
+}
+
+/** Who won, said plainly in the middle of the table. */
+function Result({ v }: { v: View }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => { popIn(ref.current) }, [v.handNo])
+  const name = (k: number) => v.seats[k]?.name ?? 'Someone'
+  const ws = v.winners
+  const split = ws.length > 1 && ws.every(w => w.hand === ws[0].hand) && new Set(ws.map(w => w.amount)).size === 1
+  const total = ws.reduce((t, w) => t + w.amount, 0)
+  return (
+    <div className="receipt result" ref={ref} role="status" aria-live="polite">
+      <span className="result__stamp">{split ? 'split pot' : ws.length > 1 ? 'winners' : 'winner'}</span>
+      {split ? (
+        <p className="result__line"><mark>{ws.map(w => name(w.seat)).join(' & ')}</mark> split {total.toLocaleString()}</p>
+      ) : (
+        ws.map(w => (
+          <p className="result__line" key={w.seat}><mark>{name(w.seat)}</mark> wins {w.amount.toLocaleString()}</p>
+        ))
       )}
+      <p className="result__sub">
+        {ws[0].hand ? `with ${split || ws.length === 1 ? ws[0].hand.toLowerCase() : 'the best hands'}` : 'everyone else folded'}
+      </p>
     </div>
   )
 }
@@ -312,7 +344,7 @@ function SeatSpot(p: {
         {showCards && (
           <div className="seat__cards">
             {(s.cards ?? Array(s.cardCount).fill(null)).map((c, i) => (
-              <Card key={i} card={c} back={!c} className="card--mini js-deal" style={{ zIndex: i }} order={dealOrder(v, p.k, i)} />
+              <Card key={i} card={c} back={!c} className={`card--mini js-deal${showdownMark(v, c)}`} style={{ zIndex: i }} order={dealOrder(v, p.k, i)} />
             ))}
           </div>
         )}
@@ -331,7 +363,9 @@ function SeatSpot(p: {
           {s.allIn && !s.folded && <span className="ticket__tag">all-in</span>}
           {v.settings.mode === 'draw5' && s.drew !== null && !s.folded && <span className="ticket__tag">drew {s.drew}</span>}
         </div>
-        {p.winHand && <span className="seat__hand">{p.winHand}</span>}
+        {v.phase === 'showdown' && (p.winHand || (revealed(v) && s.hand && !s.folded)) && (
+          <span className={`seat__hand${p.winner ? ' is-win' : ''}`}>{p.winHand || s.hand}</span>
+        )}
         {p.winner > 0 && <span className="seat__win" ref={winRef}>+{p.winner.toLocaleString()}</span>}
       </div>
       {s.bet > 0 && (
@@ -466,7 +500,7 @@ function MyHand({ v, send }: { v: View; send: Send }) {
         {cards.map((c, i) => (
           <span key={c} className="fan__slot" style={{ ['--i' as string]: i - (n - 1) / 2 }}>
             <Card
-              card={c} selected={picked.includes(i)} className="card--big js-deal" order={dealOrder(v, v.me, i)}
+              card={c} selected={picked.includes(i)} className={`card--big js-deal${showdownMark(v, c)}`} order={dealOrder(v, v.me, i)}
               onClick={drawing ? () => setPicked(p => (p.includes(i) ? p.filter(x => x !== i) : [...p, i])) : undefined}
             />
           </span>

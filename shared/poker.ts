@@ -42,7 +42,7 @@ export interface Seat {
 
 export type Phase = 'lobby' | 'preflop' | 'flop' | 'turn' | 'river' | 'bet1' | 'draw' | 'bet2' | 'showdown'
 
-export interface Winner { seat: number; amount: number; hand: string }
+export interface Winner { seat: number; amount: number; hand: string; cards: Card[] }
 /** One player's chip result for a finished hand: what they won minus what they put in. */
 export interface HandResult { id: string; name: string; net: number; won: boolean; pot: number }
 
@@ -347,7 +347,8 @@ function award(g: Game, contenders: number[], reveal: boolean) {
     const s = g.seats[k]!
     s.stack += amt
     const hand = reveal && contenders.length > 1 ? scores.get(k)!.name : ''
-    g.winners.push({ seat: k, amount: amt, hand })
+    // the winning five only when cards were actually shown; a fold-win reveals nothing
+    g.winners.push({ seat: k, amount: amt, hand, cards: hand ? scores.get(k)!.cards : [] })
     log(g, `${s.name} wins ${amt}${hand ? ' with ' + hand.toLowerCase() : ''}`)
   }
   g.results = g.seats.flatMap((s, k) => {
@@ -397,16 +398,18 @@ export function compare(a: number[], b: number[]) {
   return 0
 }
 
-export function bestHand(cards: Card[]): { score: number[]; name: string } {
+export function bestHand(cards: Card[]): { score: number[]; name: string; cards: Card[] } {
   let best: number[] | null = null
+  let five: Card[] = []
   const n = cards.length
   for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) for (let c = b + 1; c < n; c++)
     for (let d = c + 1; d < n; d++) for (let e = d + 1; e < n; e++) {
-      const s = eval5([cards[a], cards[b], cards[c], cards[d], cards[e]])
-      if (!best || compare(s, best) > 0) best = s
+      const hand = [cards[a], cards[b], cards[c], cards[d], cards[e]]
+      const s = eval5(hand)
+      if (!best || compare(s, best) > 0) { best = s; five = hand }
     }
   best ??= [0]
-  return { score: best, name: HAND_NAMES[best[0]] }
+  return { score: best, name: HAND_NAMES[best[0]], cards: five }
 }
 
 /** The private player's token never leaves; others' cards only at a real showdown. */
@@ -435,7 +438,7 @@ export function viewFor(g: Game, playerId: string | null) {
         name: s.name, stack: s.stack, bet: s.bet, folded: s.folded, allIn: s.allIn, inHand: s.inHand, drew: s.drew,
         cardCount: s.hole.length,
         cards: k === me || (g.showCards && live(s)) ? s.hole : null,
-        hand: k === me && handCards(g, k).length >= 5 ? bestHand(handCards(g, k)).name : null,
+        hand: (k === me || (g.showCards && live(s))) && handCards(g, k).length >= 5 ? bestHand(handCards(g, k)).name : null,
       },
     ),
   }

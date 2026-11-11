@@ -42,6 +42,7 @@ describe('no-limit hold\'em', () => {
     expect(g.toAct).toBe(g.button)
     expect(act(g, g.toAct, { type: 'fold' })).toBeNull()
     expect(g.phase).toBe('showdown')
+    expect(g.winners[0].cards).toEqual([]) // nobody's cards are revealed on a fold
     expect(chips(g)).toBe(2000)
     expect(g.seats[g.button]!.stack).toBe(990)
   })
@@ -63,6 +64,11 @@ describe('no-limit hold\'em', () => {
     }
     expect(g.phase).toBe('showdown')
     expect(g.seats.filter(s => s).map(s => s!.stack)).toEqual([300, 300, 100])
+    // the main pot's winner shows the five cards that made aces
+    const main = g.winners.find(w => w.seat === 0)!
+    expect(main.hand).toBe('Pair')
+    expect(main.cards).toHaveLength(5)
+    expect(main.cards).toEqual(expect.arrayContaining(['Ac', 'Ad']))
   })
 
   it('splits a tied pot', () => {
