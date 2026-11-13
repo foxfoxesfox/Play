@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { memo, type CSSProperties } from 'react'
 
 // Original hand-drawn deck: 100x140 viewBox, ink lines run through the shared #wobble filter.
 
@@ -42,7 +42,7 @@ function Suit({ s, x, y, size, flip }: { s: string; x: number; y: number; size: 
   )
 }
 
-export function Card({ card, back, selected, className = '', style, onClick, order }: {
+export const Card = memo(function Card({ card, back, selected, className = '', style, onClick, order }: {
   card?: string | null; back?: boolean; selected?: boolean; className?: string; style?: CSSProperties; onClick?: () => void; order?: number
 }) {
   const faceDown = back || !card
@@ -64,7 +64,7 @@ export function Card({ card, back, selected, className = '', style, onClick, ord
       </svg>
     </Tag>
   )
-}
+})
 
 function Face({ card }: { card: string }) {
   const [r, s] = card

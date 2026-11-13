@@ -3,7 +3,7 @@ import { stagger, animate } from 'animejs'
 import { Leaderboard } from './Board'
 import { Card } from './Card'
 import { Icon } from './Icon'
-import { reduced } from './motion'
+import { EASE_OUT, reduced } from './motion'
 
 export function Home({ go }: { go: (path: string) => void }) {
   const [busy, setBusy] = useState(false)
@@ -17,12 +17,12 @@ export function Home({ go }: { go: (path: string) => void }) {
     const still = reduced()
     animate(fanRef.current.querySelectorAll('.card'), {
       rotate: { from: 0, to: stagger([-16, 16]) },
-      x: { from: 0, to: stagger([-66, 66]) },
+      x: { from: 0, to: stagger([-84, 84]) },
       y: { from: 24, to: 0 },
       opacity: { from: 0, to: 1 },
       delay: still ? 0 : stagger(80, { start: 150 }),
-      duration: still ? 0 : 700,
-      ease: 'out(4)',
+      duration: still ? 0 : 500,
+      ease: EASE_OUT,
     })
   }, [])
 

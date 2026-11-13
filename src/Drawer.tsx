@@ -1,6 +1,6 @@
 import { animate, spring, utils } from 'animejs'
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { reduced } from './motion'
+import { EASE_OUT, reduced } from './motion'
 
 const DRAWER_W = 360
 const KEY = 'play.drawer'
@@ -51,19 +51,19 @@ export function Drawer({ open, mobile, onClose, roomRef, children }: {
     const instant = first.current || reduced()
     first.current = false
     if (!mobile) {
-      utils.set(sheet, { y: 0 })
+      utils.set(sheet, { y: '0%' })
       animate(room, {
         '--drawer-w': `${open ? DRAWER_W : 0}px`,
-        duration: instant ? 0 : open ? 380 : 260,
-        ease: open ? 'out(4)' : 'out(2)',
+        duration: instant ? 0 : open ? 400 : 350,
+        ease: EASE_OUT,
       })
-      animate(sheet.firstElementChild!, { opacity: open ? 1 : 0, x: open ? 0 : 24, duration: instant ? 0 : open ? 320 : 180, ease: 'out(3)' })
+      animate(sheet.firstElementChild!, { opacity: open ? 1 : 0, x: open ? 0 : 24, duration: instant ? 0 : open ? 320 : 180, ease: EASE_OUT })
       return
     }
     room.style.setProperty('--drawer-w', '0px')
     utils.set(sheet.firstElementChild!, { opacity: 1, x: 0 })
-    animate(sheet, { y: open ? '0%' : '100%', duration: instant ? 0 : open ? 420 : 260, ease: open ? spring({ bounce: 0, duration: 420 }) : 'out(2)' })
-    if (scrim) animate(scrim, { opacity: open ? 1 : 0, duration: instant ? 0 : 220, ease: 'out(2)' })
+    animate(sheet, { y: open ? '0%' : '100%', duration: instant ? 0 : open ? 420 : 350, ease: open ? spring({ bounce: 0, duration: 420 }) : EASE_OUT })
+    if (scrim) animate(scrim, { opacity: open ? 1 : 0, duration: instant ? 0 : open ? 250 : 150, ease: EASE_OUT })
   }, [open, mobile, roomRef])
 
   // phone: drag the handle down to dismiss; let go early and it springs back

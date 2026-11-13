@@ -11,7 +11,7 @@ export interface DealerApi {
 }
 
 // a few fixed tilts so the pile looks tossed, not stacked
-const TILTS = [-8, 6, -3, 11, -12, 4]
+const TILTS = [-8, 6, -3, 11, -12, 4].map(t => ({ rotate: `${t}deg` })) // stable style objects, so memoised cards skip re-rendering
 
 /** The drawn dealer in a striped visor, at the top of the table with the deck and discard pile in front. */
 export function Dealer({ ref, discards }: { ref: Ref<DealerApi>; discards: number }) {
@@ -71,7 +71,7 @@ export function Dealer({ ref, discards }: { ref: Ref<DealerApi>; discards: numbe
       </div>
       <div className="pile" ref={pileRef} role="img" aria-label={`Discard pile: ${discards} card${discards === 1 ? '' : 's'} burned or folded`} title="Discards: burn cards and folded hands">
         {Array.from({ length: Math.min(discards, TILTS.length) }, (_, i) => (
-          <Card key={i} back style={{ rotate: `${TILTS[i]}deg` }} />
+          <Card key={i} back style={TILTS[i]} />
         ))}
         {discards === 0 && <span className="pile__empty" aria-hidden="true" />}
         <span className="pile__label">{discards > 0 ? `discards · ${discards}` : 'discards'}</span>

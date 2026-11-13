@@ -1,4 +1,4 @@
-import { animate, spring, stagger, type JSAnimation } from 'animejs'
+import { animate, cubicBezier, spring, stagger, type JSAnimation } from 'animejs'
 import { sfx, type Sfx } from './sound'
 
 export const reduced = () => {
@@ -6,7 +6,8 @@ export const reduced = () => {
 }
 
 // one place for the table's motion vocabulary
-export const EASE_OUT = 'out(4)'
+// transitions.dev --ease-smooth-out: opens, closes, slides and position changes all share it
+export const EASE_OUT = cubicBezier(0.22, 1, 0.36, 1)
 export const SHUFFLE_MS = 760
 export const DEAL_GAP = 75
 const d = (ms: number) => (reduced() ? 0 : ms)
@@ -164,19 +165,19 @@ export function look(el: Element | null, dx: number, dy: number) {
 /** One-shot entrance for side panels: 40ms apart. */
 export function panelIn(els: Element[]) {
   if (!els.length || reduced()) return
-  animate(els, { opacity: { from: 0, to: 1 }, y: { from: 14, to: 0 }, duration: 420, delay: stagger(40), ease: EASE_OUT })
+  animate(els, { opacity: { from: 0, to: 1 }, y: { from: 12, to: 0 }, duration: 400, delay: stagger(40), ease: EASE_OUT })
 }
 
 /** Text swap when the explained thing changes (mode descriptions). */
 export function swapIn(els: Element[]) {
   if (!els.length || reduced()) return
-  animate(els, { opacity: { from: 0, to: 1 }, y: { from: 6, to: 0 }, filter: { from: 'blur(4px)', to: 'blur(0px)' }, duration: 260, delay: stagger(40), ease: EASE_OUT })
+  animate(els, { opacity: { from: 0, to: 1 }, y: { from: 4, to: 0 }, filter: { from: 'blur(2px)', to: 'blur(0px)' }, duration: 150, delay: stagger(40), ease: 'inOut(2)' })
 }
 
 /** Rows settle in when a list opens (hand guide). */
 export function rowsIn(els: Element[], start = 0) {
   if (!els.length || reduced()) return
-  animate(els, { opacity: { from: 0, to: 1 }, x: { from: -8, to: 0 }, duration: 320, delay: stagger(28, { start }), ease: EASE_OUT })
+  animate(els, { opacity: { from: 0, to: 1 }, x: { from: -8, to: 0 }, duration: 320, delay: stagger(Math.min(40, 280 / els.length), { start }), ease: EASE_OUT })
 }
 
 /** A card flies out of its trigger face-down and flips over to its face. */
@@ -190,7 +191,7 @@ export function flipOpen(card: HTMLElement, from: Pt) {
     rotateY: { from: 180, to: 0 },
     rotateZ: { from: -8, to: 0 },
     opacity: [{ from: 0, to: 1, duration: 90 }],
-    duration: 640,
+    duration: 500,
     ease: EASE_OUT,
   })
 }
@@ -205,9 +206,9 @@ export function flipClose(card: HTMLElement, to: Pt, done: () => void) {
     scale: { to: 0.2 },
     rotateY: { to: 180 },
     rotateZ: { to: -8 },
-    opacity: [{ to: 0, delay: 260, duration: 80 }],
-    duration: 340,
-    ease: 'out(2)',
+    opacity: [{ to: 0, delay: 170, duration: 80 }],
+    duration: 250,
+    ease: EASE_OUT,
     onComplete: () => {
       // reset for the next open
       card.style.transform = ''
@@ -220,17 +221,17 @@ export function flipClose(card: HTMLElement, to: Pt, done: () => void) {
 /** Highlight glides to the selected option. */
 export function glideTo(el: HTMLElement | null, box: { top: number; height: number }, instant = false) {
   if (!el) return
-  animate(el, { y: box.top, height: box.height, duration: instant ? 0 : d(300), ease: EASE_OUT })
+  animate(el, { y: box.top, height: box.height, duration: instant ? 0 : d(250), ease: EASE_OUT })
 }
 
 /** A small popover grows out of its button (transform-origin is set in CSS) and shrinks back, faster, on close. */
 export function popOpen(el: HTMLElement) {
   if (reduced()) return animate(el, { opacity: { from: 0, to: 1 }, duration: 120 })
-  animate(el, { opacity: { from: 0, to: 1 }, scale: { from: 0.92, to: 1 }, y: { from: 8, to: 0 }, duration: 240, ease: EASE_OUT })
+  animate(el, { opacity: { from: 0, to: 1 }, scale: { from: 0.97, to: 1 }, y: { from: 8, to: 0 }, duration: 250, ease: EASE_OUT })
 }
 export function popClose(el: HTMLElement, done: () => void) {
   if (reduced()) return done()
-  animate(el, { opacity: { to: 0 }, scale: { to: 0.95 }, y: { to: 6 }, duration: 150, ease: 'out(2)', onComplete: done })
+  animate(el, { opacity: { to: 0 }, scale: { to: 0.99 }, y: { to: 4 }, duration: 150, ease: EASE_OUT, onComplete: done })
 }
 
 /** The NOW ticket pops on — a named overshoot case (badge pop). */
@@ -262,7 +263,7 @@ export function countTo(el: HTMLElement | null, from: number, to: number): JSAni
 /** Small shake for an error. */
 export function shake(el: Element | null) {
   if (!el || reduced()) return
-  return animate(el, { x: [0, -6, 5, -3, 0], duration: 360, ease: 'inOut(2)' })
+  return animate(el, { x: [0, -8, 8, -6, 0], duration: 320, ease: 'inOut(2)' })
 }
 
 /** Rise-and-fade for "+340" winnings. */
